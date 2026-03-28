@@ -42,7 +42,7 @@ namespace SteroidGuide.Common.UI
         private int _totalPages = 1;
         private int _selectedItemId = -1;
         private int _updateCounter;
-        private const int ItemsPerPage = 20;
+        private int ItemsPerPage => _itemGrid?.ItemsPerPage ?? 20;
 
         public override void OnInitialize()
         {

@@ -12,13 +12,30 @@ namespace SteroidGuide.Common.UI
     {
         private List<int> _items = new();
         private int _selectedItemId = -1;
-        private const int Columns = 5;
         private const int Rows = 4;
         private const float CellWidth = 48f;
         private const float CellHeight = 60f;
         private const float CellPadding = 6f;
 
         public event Action<int> OnItemSelected;
+
+        /// <summary>
+        /// Dynamically computed column count based on the element's actual width.
+        /// </summary>
+        public int Columns
+        {
+            get
+            {
+                float availableWidth = GetDimensions().Width;
+                if (availableWidth <= 0f)
+                    return 1;
+                // First cell needs CellWidth, each additional cell needs CellWidth + CellPadding
+                int cols = Math.Max(1, (int)((availableWidth + CellPadding) / (CellWidth + CellPadding)));
+                return cols;
+            }
+        }
+
+        public int ItemsPerPage => Columns * Rows;
 
         public void SetItems(List<int> items, int selectedId)
         {
@@ -37,9 +54,10 @@ namespace SteroidGuide.Common.UI
             int col = (int)(relX / (CellWidth + CellPadding));
             int row = (int)(relY / (CellHeight + CellPadding));
 
-            if (col >= 0 && col < Columns && row >= 0 && row < Rows)
+            int columns = Columns;
+            if (col >= 0 && col < columns && row >= 0 && row < Rows)
             {
-                int index = row * Columns + col;
+                int index = row * columns + col;
                 if (index < _items.Count)
                 {
                     OnItemSelected?.Invoke(_items[index]);
@@ -53,10 +71,11 @@ namespace SteroidGuide.Common.UI
             float startX = dims.X;
             float startY = dims.Y;
 
-            for (int i = 0; i < _items.Count && i < Columns * Rows; i++)
+            int columns = Columns;
+            for (int i = 0; i < _items.Count && i < columns * Rows; i++)
             {
-                int row = i / Columns;
-                int col = i % Columns;
+                int row = i / columns;
+                int col = i % columns;
 
                 float x = startX + col * (CellWidth + CellPadding);
                 float y = startY + row * (CellHeight + CellPadding);
