@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>SteroidGuide</AssemblyName>
+    <RootNamespace>SteroidGuide</RootNamespace>
+    <TargetFramework>net8.0</TargetFramework>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <LangVersion>12.0</LangVersion>
+    <BuildMod>false</BuildMod>
+  </PropertyGroup>
+  <Import Project="../../../tModLoader/tMLMod.targets" />
+</Project>

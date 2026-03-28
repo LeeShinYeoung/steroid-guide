@@ -1,0 +1,1 @@
+Analyzes your inventory and nearby chests to find the most powerful items you can craft through multi-step recipe chains. A smarter Guide that sees the full picture.

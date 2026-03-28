@@ -1,0 +1,3 @@
+displayName = Steroid Guide
+author = SteroidGuide
+version = 1.0.0
