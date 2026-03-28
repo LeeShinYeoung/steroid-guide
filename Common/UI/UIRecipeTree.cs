@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Terraria;
+using Terraria.GameContent;
 using Terraria.GameContent.UI.Elements;
 using Terraria.ID;
 using Terraria.UI;
@@ -62,10 +64,8 @@ namespace SteroidGuide.Common.UI
                 return;
             }
 
-            // Root item title
-            var rootItem = new Item();
-            rootItem.SetDefaults(root.ItemId);
-            AddLine(rootItem.Name, Color.Gold, 0.85f);
+            // Root item title with icon
+            AddItemLine(root.ItemId, "", "", Color.Gold, 0.85f);
 
             // Tree nodes
             AddChildren(root, 0);
@@ -96,9 +96,6 @@ namespace SteroidGuide.Common.UI
                 string indent = BuildIndent(depth);
                 string connector = isLast ? "\u2514\u2500 " : "\u251C\u2500 ";
 
-                var childItem = new Item();
-                childItem.SetDefaults(child.ItemId);
-
                 string countStr = child.RequiredCount > 1 ? $" x{child.RequiredCount}" : "";
                 string statusStr = child.Status switch
                 {
@@ -118,22 +115,22 @@ namespace SteroidGuide.Common.UI
                     && child.Children != null && child.Children.Count > 0;
                 bool isCollapsed = _collapsedItemIds.Contains(child.ItemId);
 
-                // Add collapse/expand prefix for craftable nodes with children
                 string collapsePrefix = "";
                 if (hasCraftableChildren)
                     collapsePrefix = isCollapsed ? "[+] " : "[-] ";
 
-                string text = $"{indent}{connector}{collapsePrefix}{childItem.Name}{countStr}{statusStr}";
+                string prefix = $"{indent}{connector}{collapsePrefix}";
+                string suffix = $"{countStr}{statusStr}";
 
                 if (hasCraftableChildren)
                 {
-                    // Clickable node for collapse/expand
                     var capturedChild = child;
-                    AddClickableLine(text, color, 0.7f, () => ToggleCollapse(capturedChild.ItemId));
+                    AddClickableItemLine(child.ItemId, prefix, suffix, color, 0.7f,
+                        () => ToggleCollapse(capturedChild.ItemId));
                 }
                 else
                 {
-                    AddLine(text, color, 0.7f);
+                    AddItemLine(child.ItemId, prefix, suffix, color, 0.7f);
                 }
 
                 // Show children if not collapsed
@@ -289,10 +286,103 @@ namespace SteroidGuide.Common.UI
             _list.Add(line);
         }
 
+        private void AddItemLine(int itemId, string prefix, string suffix, Color color, float scale)
+        {
+            var line = new UITreeItemLine(itemId, prefix, suffix, color, scale);
+            line.Width.Set(0f, 1f);
+            line.Height.Set(24f, 0f);
+            _list.Add(line);
+        }
+
+        private void AddClickableItemLine(int itemId, string prefix, string suffix, Color color, float scale, Action onClick)
+        {
+            var line = new UITreeItemLine(itemId, prefix, suffix, color, scale);
+            line.Width.Set(0f, 1f);
+            line.Height.Set(24f, 0f);
+            line.OnLeftClick += (evt, el) => onClick();
+            _list.Add(line);
+        }
+
         private void ShowPlaceholder()
         {
             _list?.Clear();
             AddLine("Click an item above to view its recipe tree.", Color.Gray, 0.75f);
+        }
+
+        private class UITreeItemLine : UIElement
+        {
+            private readonly int _itemId;
+            private readonly string _prefix;
+            private readonly string _suffix;
+            private readonly Color _color;
+            private readonly float _scale;
+
+            public UITreeItemLine(int itemId, string prefix, string suffix, Color color, float scale)
+            {
+                _itemId = itemId;
+                _prefix = prefix;
+                _suffix = suffix;
+                _color = color;
+                _scale = scale;
+            }
+
+            protected override void DrawSelf(SpriteBatch spriteBatch)
+            {
+                var dims = GetDimensions();
+                float x = dims.X;
+                float y = dims.Y;
+                float centerY = y + dims.Height / 2f;
+
+                // Draw prefix text (indent + connector + collapse indicator)
+                float prefixWidth = 0f;
+                if (!string.IsNullOrEmpty(_prefix))
+                {
+                    var prefixSize = Utils.DrawBorderString(spriteBatch, _prefix,
+                        new Vector2(x, centerY - 8f), Color.White, _scale);
+                    prefixWidth = prefixSize.X;
+                }
+
+                // Draw item icon (20x20)
+                const float iconSize = 20f;
+                float iconX = x + prefixWidth + iconSize / 2f;
+                DrawItemIcon(spriteBatch, _itemId, new Vector2(iconX, centerY), iconSize);
+
+                // Draw item name + suffix
+                float textX = x + prefixWidth + iconSize + 4f;
+                var item = new Item();
+                item.SetDefaults(_itemId);
+                string text = item.Name + _suffix;
+                Utils.DrawBorderString(spriteBatch, text, new Vector2(textX, centerY - 8f), _color, _scale);
+
+                // Hover tooltip
+                var rect = dims.ToRectangle();
+                if (rect.Contains(Main.mouseX, Main.mouseY))
+                {
+                    var hoverItem = new Item();
+                    hoverItem.SetDefaults(_itemId);
+                    Main.HoverItem = hoverItem.Clone();
+                    Main.hoverItemName = hoverItem.Name;
+                }
+            }
+
+            private static void DrawItemIcon(SpriteBatch spriteBatch, int itemId, Vector2 center, float maxDim)
+            {
+                Main.instance.LoadItem(itemId);
+                var texture = TextureAssets.Item[itemId].Value;
+
+                Rectangle frame;
+                if (Main.itemAnimations[itemId] != null)
+                    frame = Main.itemAnimations[itemId].GetFrame(texture);
+                else
+                    frame = texture.Frame();
+
+                float scale = 1f;
+                if (frame.Width > maxDim || frame.Height > maxDim)
+                    scale = maxDim / Math.Max(frame.Width, frame.Height);
+
+                spriteBatch.Draw(texture, center, frame, Color.White, 0f,
+                    frame.Size() / 2f, scale, SpriteEffects.None, 0f);
+            }
         }
     }
 }
