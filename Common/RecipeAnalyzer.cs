@@ -41,7 +41,7 @@ namespace SteroidGuide.Common
                 var visiting = new HashSet<int>();
                 // Each top-level item gets its own copy so items are independently evaluated
                 var availableCopy = new Dictionary<int, int>(available);
-                if (CanCraft(itemId, 1, graph, availableCopy, visiting, noRecipeCache))
+                if (CanCraft(itemId, 1, graph, availableCopy, visiting, noRecipeCache, requireRecipe: true))
                 {
                     result.AllCraftable.Add(itemId);
                 }
@@ -83,10 +83,11 @@ namespace SteroidGuide.Common
         }
 
         private static bool CanCraft(int itemId, int needed, RecipeGraphData graph,
-            Dictionary<int, int> available, HashSet<int> visiting, HashSet<int> noRecipeCache)
+            Dictionary<int, int> available, HashSet<int> visiting, HashSet<int> noRecipeCache,
+            bool requireRecipe = false)
         {
             available.TryGetValue(itemId, out int owned);
-            if (owned >= needed)
+            if (!requireRecipe && owned >= needed)
             {
                 // Consume from available to prevent double-counting
                 available[itemId] = owned - needed;
