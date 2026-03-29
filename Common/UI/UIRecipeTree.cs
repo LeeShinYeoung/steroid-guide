@@ -19,6 +19,10 @@ namespace SteroidGuide.Common.UI
         private Dictionary<int, int> _currentAvailable;
         private readonly HashSet<int> _collapsedItemIds = new();
 
+        private const float DepthIndent = 20f;
+        private static readonly Color LineColor = Color.Gray * 0.6f;
+        private const int LineThickness = 2;
+
         public override void OnInitialize()
         {
             var bg = new UIPanel();
@@ -64,26 +68,30 @@ namespace SteroidGuide.Common.UI
                 return;
             }
 
-            // Root item title with icon
-            AddItemLine(root.ItemId, "", "", Color.Gold, 0.85f);
+            // Root item title with icon — no tree lines
+            var rootLine = new UITreeItemLine(root.ItemId, "", Color.Gold, 0.85f, -1, false, null, TriangleState.None);
+            rootLine.Width.Set(0f, 1f);
+            rootLine.Height.Set(24f, 0f);
+            _list.Add(rootLine);
 
             // Tree nodes
-            AddChildren(root, 0);
+            var emptyParentLines = new List<bool>();
+            AddChildren(root, 0, emptyParentLines);
 
             // Crafting station for root recipe
             if (root.UsedRecipe != null)
-                AddCraftingStationLine(root.UsedRecipe, 0);
+                AddCraftingStationLine(root.UsedRecipe, 0, emptyParentLines);
 
             // Alternative recipe button for root
             if (root.AlternativeRecipes != null && root.AlternativeRecipes.Count > 0)
             {
                 var capturedRoot = root;
-                AddClickableLine("Alternative Recipe \u25B6", new Color(150, 200, 255), 0.7f,
-                    () => SwapAlternativeRecipe(capturedRoot));
+                AddTreeTextLine("Alternative Recipe \u25B6", new Color(150, 200, 255), 0.7f,
+                    0, emptyParentLines, () => SwapAlternativeRecipe(capturedRoot));
             }
         }
 
-        private void AddChildren(RecipeTreeNode node, int depth)
+        private void AddChildren(RecipeTreeNode node, int depth, List<bool> parentLines)
         {
             if (node.Children == null || node.Children.Count == 0)
                 return;
@@ -92,9 +100,6 @@ namespace SteroidGuide.Common.UI
             {
                 var child = node.Children[i];
                 bool isLast = i == node.Children.Count - 1;
-
-                string indent = BuildIndent(depth);
-                string connector = isLast ? "\u2514\u2500 " : "\u251C\u2500 ";
 
                 string countStr = child.RequiredCount > 1 ? $" x{child.RequiredCount}" : "";
                 string statusStr = child.Status switch
@@ -115,39 +120,41 @@ namespace SteroidGuide.Common.UI
                     && child.Children != null && child.Children.Count > 0;
                 bool isCollapsed = _collapsedItemIds.Contains(child.ItemId);
 
-                string collapsePrefix = "";
-                if (hasCraftableChildren)
-                    collapsePrefix = isCollapsed ? "[+] " : "[-] ";
-
-                string prefix = $"{indent}{connector}{collapsePrefix}";
                 string suffix = $"{countStr}{statusStr}";
+
+                TriangleState triangleState = TriangleState.None;
+                if (hasCraftableChildren)
+                    triangleState = isCollapsed ? TriangleState.Collapsed : TriangleState.Expanded;
+
+                var line = new UITreeItemLine(child.ItemId, suffix, color, 0.7f,
+                    depth, isLast, parentLines, triangleState);
+                line.Width.Set(0f, 1f);
+                line.Height.Set(24f, 0f);
 
                 if (hasCraftableChildren)
                 {
                     var capturedChild = child;
-                    AddClickableItemLine(child.ItemId, prefix, suffix, color, 0.7f,
-                        () => ToggleCollapse(capturedChild.ItemId));
+                    line.OnLeftClick += (evt, el) => ToggleCollapse(capturedChild.ItemId);
                 }
-                else
-                {
-                    AddItemLine(child.ItemId, prefix, suffix, color, 0.7f);
-                }
+
+                _list.Add(line);
 
                 // Show children if not collapsed
                 if (hasCraftableChildren && !isCollapsed)
                 {
-                    AddChildren(child, depth + 1);
+                    var childParentLines = new List<bool>(parentLines) { !isLast };
+
+                    AddChildren(child, depth + 1, childParentLines);
 
                     if (child.UsedRecipe != null)
-                        AddCraftingStationLine(child.UsedRecipe, depth + 1);
+                        AddCraftingStationLine(child.UsedRecipe, depth + 1, childParentLines);
 
                     // Alternative Recipe button
                     if (child.AlternativeRecipes != null && child.AlternativeRecipes.Count > 0)
                     {
-                        string altIndent = BuildIndent(depth + 1);
                         var capturedChild = child;
-                        AddClickableLine($"{altIndent}   Alternative Recipe \u25B6", new Color(150, 200, 255), 0.65f,
-                            () => SwapAlternativeRecipe(capturedChild));
+                        AddTreeTextLine("Alternative Recipe \u25B6", new Color(150, 200, 255), 0.65f,
+                            depth + 1, childParentLines, () => SwapAlternativeRecipe(capturedChild));
                     }
                 }
             }
@@ -207,7 +214,7 @@ namespace SteroidGuide.Common.UI
             SetTree(_currentRoot);
         }
 
-        private void AddCraftingStationLine(Recipe recipe, int depth)
+        private void AddCraftingStationLine(Recipe recipe, int depth, List<bool> parentLines)
         {
             var tiles = new List<string>();
             foreach (int tileId in recipe.requiredTile)
@@ -220,22 +227,20 @@ namespace SteroidGuide.Common.UI
 
             if (tiles.Count > 0)
             {
-                string indent = BuildIndent(depth);
-                string text = $"{indent}   Crafting Station: {string.Join(", ", tiles)}";
-                AddLine(text, Color.LightBlue, 0.65f);
+                string text = $"Crafting Station: {string.Join(", ", tiles)}";
+                AddTreeTextLine(text, Color.LightBlue, 0.65f, depth, parentLines);
             }
 
             // Show conditions if any
             if (recipe.Conditions != null && recipe.Conditions.Count > 0)
             {
-                string indent = BuildIndent(depth);
                 var condNames = new List<string>();
                 foreach (var cond in recipe.Conditions)
                 {
                     condNames.Add(cond.Description.Value);
                 }
-                string text = $"{indent}   Conditions: {string.Join(", ", condNames)}";
-                AddLine(text, new Color(180, 180, 220), 0.65f);
+                string text = $"Conditions: {string.Join(", ", condNames)}";
+                AddTreeTextLine(text, new Color(180, 180, 220), 0.65f, depth, parentLines);
             }
         }
 
@@ -262,68 +267,60 @@ namespace SteroidGuide.Common.UI
             return $"Tile #{tileId}";
         }
 
-        private static string BuildIndent(int depth)
+        private void AddTreeTextLine(string text, Color color, float scale, int depth, List<bool> parentLines, Action onClick = null)
         {
-            return depth > 0 ? new string(' ', depth * 3) : "";
-        }
-
-        private void AddLine(string text, Color color, float scale)
-        {
-            var line = new UIText(text, scale);
-            line.TextColor = color;
+            var line = new UITreeTextLine(text, color, scale, depth, parentLines);
             line.Width.Set(0f, 1f);
             line.Height.Set(20f, 0f);
-            _list.Add(line);
-        }
-
-        private void AddClickableLine(string text, Color color, float scale, Action onClick)
-        {
-            var line = new UIText(text, scale);
-            line.TextColor = color;
-            line.Width.Set(0f, 1f);
-            line.Height.Set(20f, 0f);
-            line.OnLeftClick += (evt, el) => onClick();
-            _list.Add(line);
-        }
-
-        private void AddItemLine(int itemId, string prefix, string suffix, Color color, float scale)
-        {
-            var line = new UITreeItemLine(itemId, prefix, suffix, color, scale);
-            line.Width.Set(0f, 1f);
-            line.Height.Set(24f, 0f);
-            _list.Add(line);
-        }
-
-        private void AddClickableItemLine(int itemId, string prefix, string suffix, Color color, float scale, Action onClick)
-        {
-            var line = new UITreeItemLine(itemId, prefix, suffix, color, scale);
-            line.Width.Set(0f, 1f);
-            line.Height.Set(24f, 0f);
-            line.OnLeftClick += (evt, el) => onClick();
+            if (onClick != null)
+                line.OnLeftClick += (evt, el) => onClick();
             _list.Add(line);
         }
 
         private void ShowPlaceholder()
         {
             _list?.Clear();
-            AddLine("Click an item above to view its recipe tree.", Color.Gray, 0.75f);
+            var line = new UIText("Click an item above to view its recipe tree.", 0.75f);
+            line.TextColor = Color.Gray;
+            line.Width.Set(0f, 1f);
+            line.Height.Set(20f, 0f);
+            _list?.Add(line);
         }
 
+        private enum TriangleState
+        {
+            None,
+            Expanded,
+            Collapsed
+        }
+
+        /// <summary>
+        /// Tree node line with item icon and graphic connector lines.
+        /// </summary>
         private class UITreeItemLine : UIElement
         {
             private readonly int _itemId;
-            private readonly string _prefix;
             private readonly string _suffix;
             private readonly Color _color;
             private readonly float _scale;
+            private readonly int _depth;
+            private readonly bool _isLast;
+            private readonly List<bool> _parentLines;
+            private readonly TriangleState _triangleState;
 
-            public UITreeItemLine(int itemId, string prefix, string suffix, Color color, float scale)
+            private const float TriangleSize = 8f;
+
+            public UITreeItemLine(int itemId, string suffix, Color color, float scale,
+                int depth, bool isLast, List<bool> parentLines, TriangleState triangleState)
             {
                 _itemId = itemId;
-                _prefix = prefix;
                 _suffix = suffix;
                 _color = color;
                 _scale = scale;
+                _depth = depth;
+                _isLast = isLast;
+                _parentLines = parentLines != null ? new List<bool>(parentLines) : null;
+                _triangleState = triangleState;
             }
 
             protected override void DrawSelf(SpriteBatch spriteBatch)
@@ -333,22 +330,30 @@ namespace SteroidGuide.Common.UI
                 float y = dims.Y;
                 float centerY = y + dims.Height / 2f;
 
-                // Draw prefix text (indent + connector + collapse indicator)
-                float prefixWidth = 0f;
-                if (!string.IsNullOrEmpty(_prefix))
+                // Draw graphic tree lines
+                if (_depth >= 0)
+                    DrawTreeLines(spriteBatch, x, y, dims.Height, centerY);
+
+                // Content area starts after tree connector region
+                float contentX = _depth >= 0 ? x + (_depth + 1) * DepthIndent : x;
+
+                // Draw triangle toggle for collapsible nodes
+                float triangleWidth = 0f;
+                if (_triangleState != TriangleState.None)
                 {
-                    var prefixSize = Utils.DrawBorderString(spriteBatch, _prefix,
-                        new Vector2(x, centerY - 8f), Color.White, _scale);
-                    prefixWidth = prefixSize.X;
+                    bool hovered = GetDimensions().ToRectangle().Contains(Main.mouseX, Main.mouseY);
+                    Color triColor = hovered ? Color.Gold : Color.White;
+                    DrawTriangle(spriteBatch, new Vector2(contentX, centerY), _triangleState, triColor);
+                    triangleWidth = TriangleSize + 4f;
                 }
 
                 // Draw item icon (20x20)
                 const float iconSize = 20f;
-                float iconX = x + prefixWidth + iconSize / 2f;
+                float iconX = contentX + triangleWidth + iconSize / 2f;
                 DrawItemIcon(spriteBatch, _itemId, new Vector2(iconX, centerY), iconSize);
 
                 // Draw item name + suffix
-                float textX = x + prefixWidth + iconSize + 4f;
+                float textX = contentX + triangleWidth + iconSize + 4f;
                 var item = new Item();
                 item.SetDefaults(_itemId);
                 string text = item.Name + _suffix;
@@ -363,6 +368,81 @@ namespace SteroidGuide.Common.UI
                     Main.HoverItem = hoverItem.Clone();
                     Main.hoverItemName = hoverItem.Name;
                 }
+            }
+
+            private static void DrawTriangle(SpriteBatch spriteBatch, Vector2 center, TriangleState state, Color color)
+            {
+                var pixel = TextureAssets.MagicPixel.Value;
+                float half = TriangleSize / 2f;
+
+                if (state == TriangleState.Expanded)
+                {
+                    // Downward triangle (▼): draw horizontal lines from top to bottom, narrowing
+                    int rows = (int)TriangleSize;
+                    for (int row = 0; row < rows; row++)
+                    {
+                        float progress = (float)row / (rows - 1);
+                        float width = TriangleSize * (1f - progress);
+                        float lx = center.X - width / 2f;
+                        float ly = center.Y - half + row;
+                        spriteBatch.Draw(pixel,
+                            new Rectangle((int)lx, (int)ly, (int)Math.Max(1, width), 1),
+                            color);
+                    }
+                }
+                else if (state == TriangleState.Collapsed)
+                {
+                    // Right triangle (▶): draw vertical lines from left to right, narrowing
+                    int cols = (int)TriangleSize;
+                    for (int col = 0; col < cols; col++)
+                    {
+                        float progress = (float)col / (cols - 1);
+                        float height = TriangleSize * (1f - progress);
+                        float lx = center.X - half + col;
+                        float ly = center.Y - height / 2f;
+                        spriteBatch.Draw(pixel,
+                            new Rectangle((int)lx, (int)ly, 1, (int)Math.Max(1, height)),
+                            color);
+                    }
+                }
+            }
+
+            private void DrawTreeLines(SpriteBatch spriteBatch, float x, float y, float height, float centerY)
+            {
+                var pixel = TextureAssets.MagicPixel.Value;
+
+                // Continuation vertical lines for ancestors
+                if (_parentLines != null)
+                {
+                    for (int d = 0; d < _parentLines.Count; d++)
+                    {
+                        if (_parentLines[d])
+                        {
+                            float lineX = x + d * DepthIndent + DepthIndent / 2f;
+                            spriteBatch.Draw(pixel,
+                                new Rectangle((int)(lineX - LineThickness / 2f), (int)y,
+                                    LineThickness, (int)height),
+                                LineColor);
+                        }
+                    }
+                }
+
+                // Connector at current depth
+                float connX = x + _depth * DepthIndent + DepthIndent / 2f;
+
+                // Vertical part: top to center (last child, L-shape) or top to bottom
+                float vertBottom = _isLast ? centerY : y + height;
+                spriteBatch.Draw(pixel,
+                    new Rectangle((int)(connX - LineThickness / 2f), (int)y,
+                        LineThickness, (int)(vertBottom - y)),
+                    LineColor);
+
+                // Horizontal part: from connector to content area
+                float horzRight = x + (_depth + 1) * DepthIndent;
+                spriteBatch.Draw(pixel,
+                    new Rectangle((int)connX, (int)(centerY - LineThickness / 2f),
+                        (int)(horzRight - connX), LineThickness),
+                    LineColor);
             }
 
             private static void DrawItemIcon(SpriteBatch spriteBatch, int itemId, Vector2 center, float maxDim)
@@ -382,6 +462,57 @@ namespace SteroidGuide.Common.UI
 
                 spriteBatch.Draw(texture, center, frame, Color.White, 0f,
                     frame.Size() / 2f, scale, SpriteEffects.None, 0f);
+            }
+        }
+
+        /// <summary>
+        /// Text-only tree line that draws ancestor continuation lines with pixel-based indentation.
+        /// Used for crafting station info, conditions, and alternative recipe buttons.
+        /// </summary>
+        private class UITreeTextLine : UIElement
+        {
+            private readonly string _text;
+            private readonly Color _color;
+            private readonly float _scale;
+            private readonly int _depth;
+            private readonly List<bool> _parentLines;
+
+            public UITreeTextLine(string text, Color color, float scale, int depth, List<bool> parentLines)
+            {
+                _text = text;
+                _color = color;
+                _scale = scale;
+                _depth = depth;
+                _parentLines = parentLines != null ? new List<bool>(parentLines) : null;
+            }
+
+            protected override void DrawSelf(SpriteBatch spriteBatch)
+            {
+                var dims = GetDimensions();
+                float x = dims.X;
+                float y = dims.Y;
+                float centerY = y + dims.Height / 2f;
+
+                // Draw continuation vertical lines for ancestors
+                if (_parentLines != null)
+                {
+                    var pixel = TextureAssets.MagicPixel.Value;
+                    for (int d = 0; d < _parentLines.Count; d++)
+                    {
+                        if (_parentLines[d])
+                        {
+                            float lineX = x + d * DepthIndent + DepthIndent / 2f;
+                            spriteBatch.Draw(pixel,
+                                new Rectangle((int)(lineX - LineThickness / 2f), (int)y,
+                                    LineThickness, (int)dims.Height),
+                                LineColor);
+                        }
+                    }
+                }
+
+                // Content starts after tree area
+                float contentX = x + (_depth + 1) * DepthIndent;
+                Utils.DrawBorderString(spriteBatch, _text, new Vector2(contentX, centerY - 8f), _color, _scale);
             }
         }
     }

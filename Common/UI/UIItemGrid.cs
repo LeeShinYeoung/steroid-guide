@@ -106,7 +106,19 @@ namespace SteroidGuide.Common.UI
                 // Hover: tooltip + highlight
                 if (cellRect.Contains(Main.mouseX, Main.mouseY))
                 {
-                    spriteBatch.Draw(TextureAssets.MagicPixel.Value, cellRect, new Color(255, 255, 255, 40));
+                    // Brighten the existing background color instead of using a white overlay
+                    Color hoverBg = new Color(
+                        Math.Min(bgColor.R + 30, 255),
+                        Math.Min(bgColor.G + 30, 255),
+                        Math.Min(bgColor.B + 30, 255),
+                        bgColor.A);
+                    spriteBatch.Draw(TextureAssets.MagicPixel.Value, cellRect, hoverBg);
+
+                    // Thin highlight border (1px, light gray) — distinct from the gold selected border
+                    if (itemId != _selectedItemId)
+                    {
+                        DrawBorder(spriteBatch, cellRect, new Color(180, 180, 180, 200), 1);
+                    }
 
                     var hoverItem = new Item();
                     hoverItem.SetDefaults(itemId);
