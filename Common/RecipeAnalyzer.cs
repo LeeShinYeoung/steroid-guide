@@ -68,17 +68,6 @@ namespace SteroidGuide.Common
                 }
             }
 
-            // Sort: rarity descending, then item ID ascending
-            result.TopTierItems.Sort((a, b) =>
-            {
-                var itemA = new Item();
-                itemA.SetDefaults(a);
-                var itemB = new Item();
-                itemB.SetDefaults(b);
-                int cmp = itemB.rare.CompareTo(itemA.rare);
-                return cmp != 0 ? cmp : a.CompareTo(b);
-            });
-
             return result;
         }
 
@@ -152,6 +141,38 @@ namespace SteroidGuide.Common
 
             visiting.Remove(itemId);
             return result;
+        }
+
+        public static int GetRecipeDepth(int itemId, RecipeGraphData graph, HashSet<int> visiting = null)
+        {
+            visiting ??= new HashSet<int>();
+
+            if (visiting.Contains(itemId))
+                return 0;
+
+            if (!graph.RecipesByResult.TryGetValue(itemId, out var recipes))
+                return 0;
+
+            visiting.Add(itemId);
+            int maxDepth = 0;
+
+            foreach (var recipe in recipes)
+            {
+                int recipeMax = 0;
+                foreach (var ingredient in recipe.requiredItem)
+                {
+                    if (ingredient.type <= ItemID.None)
+                        continue;
+                    int childDepth = GetRecipeDepth(ingredient.type, graph, visiting);
+                    if (childDepth > recipeMax)
+                        recipeMax = childDepth;
+                }
+                if (recipeMax > maxDepth)
+                    maxDepth = recipeMax;
+            }
+
+            visiting.Remove(itemId);
+            return maxDepth + 1;
         }
 
         public static RecipeTreeNode BuildRecipeTree(int itemId, int needed,

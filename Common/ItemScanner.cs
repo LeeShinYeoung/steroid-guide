@@ -5,11 +5,18 @@ using Terraria.ID;
 
 namespace SteroidGuide.Common
 {
+    public struct ScanResult
+    {
+        public Dictionary<int, int> Items;
+        public int ChestCount;
+    }
+
     public static class ItemScanner
     {
-        public static Dictionary<int, int> ScanAvailableItems(Player player)
+        public static ScanResult ScanAvailableItems(Player player)
         {
             var items = new Dictionary<int, int>();
+            int chestCount = 0;
 
             // Player inventory slots 0-57 (hotbar + inventory + coins + ammo)
             for (int i = 0; i < 58; i++)
@@ -51,6 +58,8 @@ namespace SteroidGuide.Common
                     continue;
                 }
 
+                chestCount++;
+
                 foreach (var item in chest.item)
                 {
                     if (item != null && item.type > ItemID.None && item.stack > 0)
@@ -61,7 +70,7 @@ namespace SteroidGuide.Common
                 }
             }
 
-            return items;
+            return new ScanResult { Items = items, ChestCount = chestCount };
         }
 
         private static bool IsChestUnsynced(Chest chest)

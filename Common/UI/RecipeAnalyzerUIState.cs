@@ -19,6 +19,14 @@ namespace SteroidGuide.Common.UI
         Misc
     }
 
+    public enum SortCriteria
+    {
+        Rarity,
+        Name,
+        Value,
+        RecipeDepth
+    }
+
     public class RecipeAnalyzerUIState : UIState
     {
         private UIPanel _mainPanel;
@@ -26,6 +34,13 @@ namespace SteroidGuide.Common.UI
         // Filter
         private FilterCategory _currentFilter = FilterCategory.All;
         private readonly Dictionary<FilterCategory, UIText> _filterButtons = new();
+
+        // Sort
+        private SortCriteria _currentSort = SortCriteria.Rarity;
+        private UIText _sortButton;
+        private UIPanel _sortDropdownPanel;
+        private readonly Dictionary<SortCriteria, UIText> _sortOptions = new();
+        private bool _sortDropdownOpen;
 
         // Item grid
         private UIItemGrid _itemGrid;
@@ -52,12 +67,6 @@ namespace SteroidGuide.Common.UI
             _mainPanel.HAlign = 0.5f;
             _mainPanel.VAlign = 0.5f;
             _mainPanel.SetPadding(12f);
-
-            // Title
-            var titleText = new UIText("Steroid Guide - Recipe Analyzer", 0.8f, true);
-            titleText.Top.Set(5f, 0f);
-            titleText.HAlign = 0.5f;
-            _mainPanel.Append(titleText);
 
             // Close button [X]
             var closeButton = new UITextPanel<string>("X", 0.8f, false);
@@ -93,6 +102,37 @@ namespace SteroidGuide.Common.UI
                 _filterButtons[cat] = btn;
                 filterY += 28f;
             }
+
+            // ── Sort dropdown (below filter sidebar) ──
+            _sortButton = new UIText($"Sort: {_currentSort} \u25BC", 0.7f);
+            _sortButton.Top.Set(268f, 0f);
+            _sortButton.Left.Set(6f, 0f);
+            _sortButton.Width.Set(108f, 0f);
+            _sortButton.OnLeftClick += (evt, el) => ToggleSortDropdown();
+            _mainPanel.Append(_sortButton);
+
+            _sortDropdownPanel = new UIPanel();
+            _sortDropdownPanel.Top.Set(290f, 0f);
+            _sortDropdownPanel.Left.Set(0f, 0f);
+            _sortDropdownPanel.Width.Set(120f, 0f);
+            _sortDropdownPanel.Height.Set(112f, 0f);
+            _sortDropdownPanel.SetPadding(6f);
+
+            float sortY = 0f;
+            foreach (SortCriteria sort in Enum.GetValues(typeof(SortCriteria)))
+            {
+                string label = sort == SortCriteria.RecipeDepth ? "Recipe Depth" : sort.ToString();
+                string prefix = sort == _currentSort ? "[*]" : "[ ]";
+                var option = new UIText($"{prefix} {label}", 0.7f);
+                option.Top.Set(sortY, 0f);
+                var captured = sort;
+                option.OnLeftClick += (evt, el) => SelectSort(captured);
+                _sortDropdownPanel.Append(option);
+                _sortOptions[sort] = option;
+                sortY += 26f;
+            }
+            // Start hidden
+            // _sortDropdownPanel is only appended when dropdown is open
 
             // ── Item grid ──
             _itemGrid = new UIItemGrid();
@@ -155,10 +195,10 @@ namespace SteroidGuide.Common.UI
             _updateCounter++;
             if (_updateCounter % 30 == 0 && Main.LocalPlayer != null)
             {
-                var currentItems = ItemScanner.ScanAvailableItems(Main.LocalPlayer);
-                if (!DictEquals(_lastScannedItems, currentItems))
+                var scanResult = ItemScanner.ScanAvailableItems(Main.LocalPlayer);
+                if (!DictEquals(_lastScannedItems, scanResult.Items))
                 {
-                    _lastScannedItems = currentItems;
+                    _lastScannedItems = scanResult.Items;
                     RunAnalysisFromScan();
                 }
             }
@@ -173,7 +213,8 @@ namespace SteroidGuide.Common.UI
         private void RunAnalysis()
         {
             if (Main.LocalPlayer == null) return;
-            _lastScannedItems = ItemScanner.ScanAvailableItems(Main.LocalPlayer);
+            var initialScan = ItemScanner.ScanAvailableItems(Main.LocalPlayer);
+            _lastScannedItems = initialScan.Items;
             RunAnalysisFromScan();
         }
 
@@ -197,6 +238,34 @@ namespace SteroidGuide.Common.UI
             ApplyFilter();
         }
 
+        private void ToggleSortDropdown()
+        {
+            _sortDropdownOpen = !_sortDropdownOpen;
+            if (_sortDropdownOpen)
+                _mainPanel.Append(_sortDropdownPanel);
+            else
+                _mainPanel.RemoveChild(_sortDropdownPanel);
+        }
+
+        private void SelectSort(SortCriteria sort)
+        {
+            _currentSort = sort;
+            _sortButton.SetText($"Sort: {(sort == SortCriteria.RecipeDepth ? "Recipe Depth" : sort.ToString())} \u25BC");
+            foreach (var (s, option) in _sortOptions)
+            {
+                string label = s == SortCriteria.RecipeDepth ? "Recipe Depth" : s.ToString();
+                string prefix = s == _currentSort ? "[*]" : "[ ]";
+                option.SetText($"{prefix} {label}");
+            }
+            // Close dropdown
+            if (_sortDropdownOpen)
+            {
+                _sortDropdownOpen = false;
+                _mainPanel.RemoveChild(_sortDropdownPanel);
+            }
+            ApplyFilter();
+        }
+
         private void ApplyFilter()
         {
             if (_analysisResult == null) return;
@@ -207,6 +276,47 @@ namespace SteroidGuide.Common.UI
                 if (_currentFilter == FilterCategory.All || GetItemCategory(itemId) == _currentFilter)
                     _filteredItems.Add(itemId);
             }
+
+            // Apply sorting
+            _filteredItems.Sort((a, b) =>
+            {
+                switch (_currentSort)
+                {
+                    case SortCriteria.Rarity:
+                    {
+                        var itemA = new Item(); itemA.SetDefaults(a);
+                        var itemB = new Item(); itemB.SetDefaults(b);
+                        int cmp = itemB.rare.CompareTo(itemA.rare);
+                        return cmp != 0 ? cmp : a.CompareTo(b);
+                    }
+                    case SortCriteria.Name:
+                    {
+                        var itemA = new Item(); itemA.SetDefaults(a);
+                        var itemB = new Item(); itemB.SetDefaults(b);
+                        return string.Compare(itemA.Name, itemB.Name, StringComparison.Ordinal);
+                    }
+                    case SortCriteria.Value:
+                    {
+                        var itemA = new Item(); itemA.SetDefaults(a);
+                        var itemB = new Item(); itemB.SetDefaults(b);
+                        int cmp = itemB.value.CompareTo(itemA.value);
+                        return cmp != 0 ? cmp : a.CompareTo(b);
+                    }
+                    case SortCriteria.RecipeDepth:
+                    {
+                        var graph = RecipeGraphSystem.Graph;
+                        int depthA = graph != null ? RecipeAnalyzer.GetRecipeDepth(a, graph) : 0;
+                        int depthB = graph != null ? RecipeAnalyzer.GetRecipeDepth(b, graph) : 0;
+                        int cmp = depthB.CompareTo(depthA);
+                        if (cmp != 0) return cmp;
+                        var itemA = new Item(); itemA.SetDefaults(a);
+                        var itemB = new Item(); itemB.SetDefaults(b);
+                        return itemB.rare.CompareTo(itemA.rare);
+                    }
+                    default:
+                        return 0;
+                }
+            });
 
             _currentPage = 0;
             _totalPages = Math.Max(1, (_filteredItems.Count + ItemsPerPage - 1) / ItemsPerPage);
