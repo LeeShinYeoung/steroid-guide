@@ -12,8 +12,10 @@ namespace SteroidGuide.Common.UI
 {
     public class UIRecipeTree : UIElement
     {
+        private const string EmptyStateText = "Click an item above to view its recipe tree.";
         private UIList _list;
         private UIScrollbar _scrollbar;
+        private UIEmptyStatePlaceholder _placeholder;
         private RecipeTreeNode _currentRoot;
         private RecipeGraphData _currentGraph;
         private Dictionary<int, int> _currentAvailable;
@@ -43,6 +45,11 @@ namespace SteroidGuide.Common.UI
             _list.ListPadding = 2f;
             _list.SetScrollbar(_scrollbar);
             bg.Append(_list);
+
+            _placeholder = new UIEmptyStatePlaceholder(EmptyStateText, Color.Gray, 0.75f, () => _currentRoot == null);
+            _placeholder.Width.Set(-28f, 1f);
+            _placeholder.Height.Set(0f, 1f);
+            bg.Append(_placeholder);
 
             ShowPlaceholder();
         }
@@ -280,11 +287,37 @@ namespace SteroidGuide.Common.UI
         private void ShowPlaceholder()
         {
             _list?.Clear();
-            var line = new UIText("Click an item above to view its recipe tree.", 0.75f);
-            line.TextColor = Color.Gray;
-            line.Width.Set(0f, 1f);
-            line.Height.Set(20f, 0f);
-            _list?.Add(line);
+        }
+
+        private class UIEmptyStatePlaceholder : UIElement
+        {
+            private readonly string _text;
+            private readonly Color _color;
+            private readonly float _scale;
+            private readonly Func<bool> _shouldDraw;
+
+            public UIEmptyStatePlaceholder(string text, Color color, float scale, Func<bool> shouldDraw)
+            {
+                _text = text;
+                _color = color;
+                _scale = scale;
+                _shouldDraw = shouldDraw;
+                IgnoresMouseInteraction = true;
+            }
+
+            protected override void DrawSelf(SpriteBatch spriteBatch)
+            {
+                if (_shouldDraw == null || !_shouldDraw())
+                    return;
+
+                var dims = GetDimensions();
+                Vector2 textSize = FontAssets.MouseText.Value.MeasureString(_text) * _scale;
+                Vector2 position = new(
+                    dims.X + (dims.Width - textSize.X) * 0.5f,
+                    dims.Y + (dims.Height - textSize.Y) * 0.5f);
+
+                Utils.DrawBorderString(spriteBatch, _text, position, _color, _scale);
+            }
         }
 
         private enum TriangleState
