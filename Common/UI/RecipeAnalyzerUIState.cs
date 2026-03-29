@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Terraria;
+using Terraria.GameContent;
 using Terraria.GameContent.UI.Elements;
 using Terraria.ModLoader;
 using Terraria.UI;
@@ -44,6 +45,9 @@ namespace SteroidGuide.Common.UI
 
         // Item grid
         private UIItemGrid _itemGrid;
+        private UIElement _paginationRow;
+        private UIPaginationArrowButton _previousPageButton;
+        private UIPaginationArrowButton _nextPageButton;
         private UIText _pageText;
 
         // Recipe tree
@@ -58,6 +62,9 @@ namespace SteroidGuide.Common.UI
         private int _selectedItemId = -1;
         private int _updateCounter;
         private int ItemsPerPage => _itemGrid?.ItemsPerPage ?? 20;
+        private const float PaginationArrowWidth = 30f;
+        private const float PaginationTextGap = 18f;
+        private const float PaginationTextScale = 0.75f;
 
         public override void OnInitialize()
         {
@@ -144,28 +151,32 @@ namespace SteroidGuide.Common.UI
             _mainPanel.Append(_itemGrid);
 
             // ── Pagination ──
-            var prevBtn = new UITextPanel<string>("<", 0.7f, false);
-            prevBtn.Width.Set(30f, 0f);
-            prevBtn.Height.Set(24f, 0f);
-            prevBtn.Top.Set(312f, 0f);
-            prevBtn.Left.Set(340f, 0f);
-            prevBtn.SetPadding(4f);
-            prevBtn.OnLeftClick += (evt, el) => ChangePage(-1);
-            _mainPanel.Append(prevBtn);
+            _paginationRow = new UIElement();
+            _paginationRow.Top.Set(312f, 0f);
+            _paginationRow.Left.Set(132f, 0f);
+            _paginationRow.Width.Set(650f, 0f);
+            _paginationRow.Height.Set(26f, 0f);
+            _mainPanel.Append(_paginationRow);
 
-            _pageText = new UIText("Page 1/1", 0.75f);
-            _pageText.Top.Set(315f, 0f);
-            _pageText.Left.Set(380f, 0f);
-            _mainPanel.Append(_pageText);
+            _previousPageButton = new UIPaginationArrowButton(PaginationArrowDirection.Left);
+            _previousPageButton.Width.Set(PaginationArrowWidth, 0f);
+            _previousPageButton.Height.Set(24f, 0f);
+            _previousPageButton.Top.Set(1f, 0f);
+            _previousPageButton.OnLeftClick += (evt, el) => ChangePage(-1);
+            _paginationRow.Append(_previousPageButton);
 
-            var nextBtn = new UITextPanel<string>(">", 0.7f, false);
-            nextBtn.Width.Set(30f, 0f);
-            nextBtn.Height.Set(24f, 0f);
-            nextBtn.Top.Set(312f, 0f);
-            nextBtn.Left.Set(470f, 0f);
-            nextBtn.SetPadding(4f);
-            nextBtn.OnLeftClick += (evt, el) => ChangePage(1);
-            _mainPanel.Append(nextBtn);
+            _pageText = new UIText("Page 1/1", PaginationTextScale);
+            _pageText.Top.Set(3f, 0f);
+            _paginationRow.Append(_pageText);
+
+            _nextPageButton = new UIPaginationArrowButton(PaginationArrowDirection.Right);
+            _nextPageButton.Width.Set(PaginationArrowWidth, 0f);
+            _nextPageButton.Height.Set(24f, 0f);
+            _nextPageButton.Top.Set(1f, 0f);
+            _nextPageButton.OnLeftClick += (evt, el) => ChangePage(1);
+            _paginationRow.Append(_nextPageButton);
+
+            UpdatePageText();
 
             // ── Recipe tree (bottom half) ──
             _recipeTree = new UIRecipeTree();
@@ -334,7 +345,19 @@ namespace SteroidGuide.Common.UI
 
         private void UpdatePageText()
         {
-            _pageText?.SetText($"Page {_currentPage + 1}/{_totalPages}");
+            string pageLabel = $"Page {_currentPage + 1}/{_totalPages}";
+            _pageText?.SetText(pageLabel);
+
+            if (_paginationRow != null && _pageText != null)
+            {
+                float textWidth = FontAssets.MouseText.Value.MeasureString(pageLabel).X * PaginationTextScale;
+                _pageText.Left.Set(-textWidth * 0.5f, 0.5f);
+                _previousPageButton?.Left.Set(-(textWidth * 0.5f + PaginationTextGap + PaginationArrowWidth), 0.5f);
+                _nextPageButton?.Left.Set(textWidth * 0.5f + PaginationTextGap, 0.5f);
+                _paginationRow.Recalculate();
+            }
+
+            UpdatePaginationButtonState();
         }
 
         private void ChangePage(int delta)
@@ -345,6 +368,24 @@ namespace SteroidGuide.Common.UI
                 _currentPage = newPage;
                 UpdateGrid();
                 UpdatePageText();
+            }
+        }
+
+        private void UpdatePaginationButtonState()
+        {
+            bool canGoPrevious = _currentPage > 0;
+            bool canGoNext = _currentPage < _totalPages - 1;
+
+            if (_previousPageButton != null)
+            {
+                _previousPageButton.IsEnabled = canGoPrevious;
+                _previousPageButton.IgnoresMouseInteraction = !canGoPrevious;
+            }
+
+            if (_nextPageButton != null)
+            {
+                _nextPageButton.IsEnabled = canGoNext;
+                _nextPageButton.IgnoresMouseInteraction = !canGoNext;
             }
         }
 
