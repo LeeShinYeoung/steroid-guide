@@ -35,7 +35,7 @@ namespace SteroidGuide.Common.UI
 
         // Filter
         private FilterCategory _currentFilter = FilterCategory.All;
-        private readonly Dictionary<FilterCategory, UIText> _filterButtons = new();
+        private readonly Dictionary<FilterCategory, UIFilterOption> _filterButtons = new();
 
         // Sort
         private SortCriteria _currentSort = SortCriteria.Rarity;
@@ -106,11 +106,11 @@ namespace SteroidGuide.Common.UI
             float filterY = 0f;
             foreach (FilterCategory cat in Enum.GetValues(typeof(FilterCategory)))
             {
-                string prefix = cat == _currentFilter ? "[*]" : "[ ]";
-                var btn = new UIText($"{prefix} {cat}", 0.75f);
+                var btn = new UIFilterOption(cat.ToString());
                 btn.Top.Set(filterY, 0f);
                 var captured = cat;
                 btn.OnLeftClick += (evt, el) => SetFilter(captured);
+                btn.SetSelected(cat == _currentFilter);
                 filterPanel.Append(btn);
                 _filterButtons[cat] = btn;
                 filterY += 28f;
@@ -211,9 +211,11 @@ namespace SteroidGuide.Common.UI
             _lastScannedItems = null;
             _selectedItemId = -1;
             _currentPage = 0;
+            _currentFilter = FilterCategory.All;
             _searchQuery = string.Empty;
             _searchTextBox?.Reset();
             _recipeTree?.ClearTree();
+            UpdateFilterSelectionStates();
             RunAnalysis();
         }
 
@@ -261,12 +263,16 @@ namespace SteroidGuide.Common.UI
         private void SetFilter(FilterCategory category)
         {
             _currentFilter = category;
+            UpdateFilterSelectionStates();
+            ApplyFilter();
+        }
+
+        private void UpdateFilterSelectionStates()
+        {
             foreach (var (cat, btn) in _filterButtons)
             {
-                string prefix = cat == _currentFilter ? "[*]" : "[ ]";
-                btn.SetText($"{prefix} {cat}");
+                btn.SetSelected(cat == _currentFilter);
             }
-            ApplyFilter();
         }
 
         private void ToggleSortDropdown()
