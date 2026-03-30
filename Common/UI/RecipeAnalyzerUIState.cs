@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
+using SteroidGuide.Common;
 using Terraria;
 using Terraria.GameContent;
 using Terraria.GameContent.UI.Elements;
@@ -10,17 +11,6 @@ using Terraria.UI;
 
 namespace SteroidGuide.Common.UI
 {
-    public enum FilterCategory
-    {
-        All,
-        Weapons,
-        Armor,
-        Accessories,
-        Potions,
-        Tools,
-        Misc
-    }
-
     public enum SortCriteria
     {
         Rarity,
@@ -31,6 +21,19 @@ namespace SteroidGuide.Common.UI
 
     public class RecipeAnalyzerUIState : UIState
     {
+        private static readonly (FilterCategory Category, string LabelKey)[] FilterDefinitions =
+        [
+            (FilterCategory.All, "Mods.SteroidGuide.UI.Filters.All"),
+            (FilterCategory.Weapons, "Mods.SteroidGuide.UI.Filters.Weapons"),
+            (FilterCategory.Armor, "Mods.SteroidGuide.UI.Filters.Armor"),
+            (FilterCategory.Accessories, "Mods.SteroidGuide.UI.Filters.Accessories"),
+            (FilterCategory.Tools, "Mods.SteroidGuide.UI.Filters.Tools"),
+            (FilterCategory.Consumables, "Mods.SteroidGuide.UI.Filters.Consumables"),
+            (FilterCategory.Placeables, "Mods.SteroidGuide.UI.Filters.Placeables"),
+            (FilterCategory.Materials, "Mods.SteroidGuide.UI.Filters.Materials"),
+            (FilterCategory.Misc, "Mods.SteroidGuide.UI.Filters.Misc")
+        ];
+
         private UIPanel _mainPanel;
 
         // Filter
@@ -71,6 +74,9 @@ namespace SteroidGuide.Common.UI
         private const float PaginationArrowWidth = 30f;
         private const float PaginationTextGap = 18f;
         private const float PaginationTextScale = 0.75f;
+        private const float FilterPanelTop = 42f;
+        private const float FilterOptionStep = 26f;
+        private const float FilterPanelPadding = 6f;
 
         public override void OnInitialize()
         {
@@ -96,36 +102,36 @@ namespace SteroidGuide.Common.UI
 
             // ── Filter sidebar ──
             var filterPanel = new UIPanel();
-            filterPanel.Top.Set(42f, 0f);
+            filterPanel.Top.Set(FilterPanelTop, 0f);
             filterPanel.Left.Set(0f, 0f);
             filterPanel.Width.Set(120f, 0f);
-            filterPanel.Height.Set(220f, 0f);
-            filterPanel.SetPadding(6f);
+            filterPanel.Height.Set(FilterDefinitions.Length * FilterOptionStep + FilterPanelPadding, 0f);
+            filterPanel.SetPadding(FilterPanelPadding);
             _mainPanel.Append(filterPanel);
 
             float filterY = 0f;
-            foreach (FilterCategory cat in Enum.GetValues(typeof(FilterCategory)))
+            foreach (var filterDefinition in FilterDefinitions)
             {
-                var btn = new UIFilterOption(cat.ToString());
+                var btn = new UIFilterOption(Language.GetTextValue(filterDefinition.LabelKey));
                 btn.Top.Set(filterY, 0f);
-                var captured = cat;
+                var captured = filterDefinition.Category;
                 btn.OnLeftClick += (evt, el) => SetFilter(captured);
-                btn.SetSelected(cat == _currentFilter);
+                btn.SetSelected(filterDefinition.Category == _currentFilter);
                 filterPanel.Append(btn);
-                _filterButtons[cat] = btn;
-                filterY += 28f;
+                _filterButtons[filterDefinition.Category] = btn;
+                filterY += FilterOptionStep;
             }
 
             // ── Sort dropdown (below filter sidebar) ──
             _sortButton = new UIText($"Sort: {_currentSort} \u25BC", 0.7f);
-            _sortButton.Top.Set(268f, 0f);
+            _sortButton.Top.Set(FilterPanelTop + FilterDefinitions.Length * FilterOptionStep + 12f, 0f);
             _sortButton.Left.Set(6f, 0f);
             _sortButton.Width.Set(108f, 0f);
             _sortButton.OnLeftClick += (evt, el) => ToggleSortDropdown();
             _mainPanel.Append(_sortButton);
 
             _sortDropdownPanel = new UIPanel();
-            _sortDropdownPanel.Top.Set(290f, 0f);
+            _sortDropdownPanel.Top.Set(FilterPanelTop + FilterDefinitions.Length * FilterOptionStep + 34f, 0f);
             _sortDropdownPanel.Left.Set(0f, 0f);
             _sortDropdownPanel.Width.Set(120f, 0f);
             _sortDropdownPanel.Height.Set(112f, 0f);
@@ -313,7 +319,7 @@ namespace SteroidGuide.Common.UI
             _filteredItems.Clear();
             foreach (int itemId in _analysisResult.TopTierItems)
             {
-                if (_currentFilter != FilterCategory.All && GetItemCategory(itemId) != _currentFilter)
+                if (_currentFilter != FilterCategory.All && ItemCategoryClassifier.Classify(itemId) != _currentFilter)
                     continue;
 
                 if (hasSearchQuery && (!_normalizedItemNames.TryGetValue(itemId, out string normalizedName) ||
@@ -375,8 +381,12 @@ namespace SteroidGuide.Common.UI
 
             _currentPage = 0;
             _totalPages = Math.Max(1, (_filteredItems.Count + ItemsPerPage - 1) / ItemsPerPage);
-            _itemGrid?.SetEmptyStateText(Language.GetTextValue(
-                hasSearchQuery ? "Mods.SteroidGuide.UI.SearchNoResults" : "Mods.SteroidGuide.UI.NoCraftableItems"));
+            string emptyStateKey = hasSearchQuery
+                ? "Mods.SteroidGuide.UI.SearchNoResults"
+                : _currentFilter == FilterCategory.All
+                    ? "Mods.SteroidGuide.UI.NoCraftableItems"
+                    : "Mods.SteroidGuide.UI.NoItemsInCategory";
+            _itemGrid?.SetEmptyStateText(Language.GetTextValue(emptyStateKey));
             UpdateGrid();
             UpdatePageText();
         }
@@ -445,19 +455,6 @@ namespace SteroidGuide.Common.UI
                 var tree = RecipeAnalyzer.BuildRecipeTree(itemId, 1, RecipeGraphSystem.Graph, _lastScannedItems);
                 _recipeTree?.SetTree(tree, RecipeGraphSystem.Graph, _lastScannedItems);
             }
-        }
-
-        public static FilterCategory GetItemCategory(int itemId)
-        {
-            var item = new Item();
-            item.SetDefaults(itemId);
-
-            if (item.damage > 0) return FilterCategory.Weapons;
-            if (item.headSlot > 0 || item.bodySlot > 0 || item.legSlot > 0) return FilterCategory.Armor;
-            if (item.accessory) return FilterCategory.Accessories;
-            if (item.potion || item.buffType > 0) return FilterCategory.Potions;
-            if (item.pick > 0 || item.axe > 0 || item.hammer > 0) return FilterCategory.Tools;
-            return FilterCategory.Misc;
         }
 
         public bool HandleEscapeKey()

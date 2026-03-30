@@ -24,4 +24,17 @@ UI: {
 	SearchClear: Clear
 	SearchNoResults: No craftable items match the current query.
 	NoCraftableItems: No craftable items found.
+	NoItemsInCategory: No craftable items match the selected category.
+
+	Filters: {
+		All: All
+		Weapons: Weapons
+		Armor: Armor
+		Accessories: Accessories
+		Tools: Tools
+		Consumables: Consumables
+		Placeables: Placeables
+		Materials: Materials
+		Misc: Misc
+	}
 }
