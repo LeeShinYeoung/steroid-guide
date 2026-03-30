@@ -1,43 +1,40 @@
-# Spec: Graphical Category Filter Selector
+# Spec: First-Open Analyzer UI Exception
 
 ## Summary
-Replace the analyzer's left sidebar category controls with a graphical single-select indicator instead of text markers like `[ ]` and `[*]`. This keeps the filter behavior unchanged while making the UI easier to scan and more consistent with the rest of the analyzer panel.
+Fix the client-side `Index was outside the bounds of the array` error that appears in chat the first time the player opens the Steroid Guide's `Analyze Recipes` UI. The analyzer must open cleanly on the first attempt, keep rendering valid craftable items, and remain compatible with large modded recipe sets.
 
 ## Detailed Requirements
-1. The left filter sidebar must keep the existing category set and order: `All`, `Weapons`, `Armor`, `Accessories`, `Potions`, `Tools`, `Misc`.
-2. Filter selection must remain single-select, with `All` selected by default when the UI opens.
-3. Each category row must show a graphical selection indicator, not literal text prefixes such as `[ ]` or `[*]`.
-4. The selected category must be visually distinct at a glance through the indicator itself and row styling, without relying on the label text changing.
-5. Clicking anywhere on a category row, including the indicator and label, must apply that filter immediately.
-6. Existing filter behavior must remain intact: the current filter still drives `ApplyFilter()`, still combines with search and sort, and still resets paging the same way it does today.
-7. The filter sidebar must continue to fit inside the current analyzer layout at the existing panel size and under Terraria UI scale changes.
-8. The control must be rendered without item-specific hardcoding or content-mod assumptions, and it must not require new sprite assets.
-9. This change is scoped to the left category filter UI. Sort dropdown behavior, recipe analysis, and item categorization rules must not change unless a minimal compatibility adjustment is required for the new control.
+1. Opening the analyzer from the Steroid Guide NPC must not print an exception message to chat on the first open after entering a world, nor on later opens in the same session.
+2. The fix must cover the full first-open path triggered by `SteroidGuideNPC.OnChatButtonClicked(...)`, `RecipeAnalyzerUISystem.ShowUI(...)`, `RecipeAnalyzerUIState.OnShow()`, and the first UI draw/update cycle.
+3. UI rendering must tolerate any craftable item ID returned by the existing recipe analysis, including modded items, without assuming that every item-backed asset array can be indexed blindly during the first frame.
+4. If an item icon or animation frame cannot be resolved safely for a frame, the analyzer must fail soft by keeping the row interactive and text-visible instead of throwing or surfacing a chat error.
+5. The protection must apply anywhere the analyzer renders item visuals from analysis data, including the top-tier item grid and recipe tree rows.
+6. Search, sorting, pagination, selection, recipe-tree expansion, and alternative recipe switching must continue to behave as they do today once the exception is removed.
+7. The fix must not hardcode vanilla or mod item IDs, and it must not special-case specific content mods.
+8. The analyzer's craftability results and recipe graph logic are not to be changed unless a minimal guard is required to keep invalid visual state out of the UI layer.
 
 ## Technical Design
-- Modify [Common/UI/RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) to stop storing category controls as plain `UIText` instances whose labels are rebuilt with `[ ]` and `[*]`.
-- Introduce a dedicated sidebar option UI element in `Common/UI/` such as `UIFilterOption` or an equivalently named reusable control. It should own row hit testing, hover state, selected state, and drawing of the graphical indicator plus label.
-- Keep `FilterCategory`, `SetFilter(...)`, and `ApplyFilter()` as the behavioral source of truth. The refactor should change presentation ownership, not filtering logic.
-- Use the existing tModLoader UI stack (`UIElement`, `UIText` or direct text drawing, and `DrawSelf(SpriteBatch)`) so the new control integrates with the current `UIState` layout and input model.
-- Render the selector with built-in drawing primitives already used elsewhere in the mod, such as `TextureAssets.MagicPixel`, to avoid introducing external textures.
-- Store the sidebar controls in a dictionary keyed by `FilterCategory`, but update them through explicit selected-state APIs like `SetSelected(bool)` instead of string rebuilding.
-- Preserve the existing sidebar panel footprint in `OnInitialize()` so the search box, item grid, sort control, and recipe tree keep their current positions.
-- Do not change item classification rules in `GetItemCategory(int itemId)`, the inventory scan cadence, or any recipe graph/analyzer data structures.
+- Inspect and adjust the first-open flow in [Common/UI/RecipeAnalyzerUISystem.cs](/Users/sy/projects/steroid-guide-pge10/Common/UI/RecipeAnalyzerUISystem.cs), [Common/UI/RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide-pge10/Common/UI/RecipeAnalyzerUIState.cs), [Common/UI/UIItemGrid.cs](/Users/sy/projects/steroid-guide-pge10/Common/UI/UIItemGrid.cs), and [Common/UI/UIRecipeTree.cs](/Users/sy/projects/steroid-guide-pge10/Common/UI/UIRecipeTree.cs).
+- Add a small shared helper in `Common/UI/` if needed so item-icon rendering uses one guarded code path instead of duplicating fragile array access in both the grid and the tree.
+- Keep `RecipeAnalyzer`, `RecipeGraphSystem`, and `ItemScanner` as the source of recipe data unless investigation proves the first-open exception comes from handing the UI an invalid item ID. The default assumption should be that the bug is in UI initialization or rendering, not in craftability analysis.
+- For item visuals, continue to use the normal tModLoader/Terraria rendering path (`Main.instance.LoadItem(...)`, `TextureAssets.Item`, `Main.itemAnimations`, `Item.SetDefaults(...)`), but add explicit bounds/readiness checks before indexing array-backed assets.
+- If the first-open issue is caused by initialization order rather than a bad item ID, defer the unsafe step until the UI state is attached and ready instead of allowing a first-frame exception. Any deferral must stay internal to the analyzer UI and must not require extra player input.
+- Preserve existing `AnalysisResult` contents, existing filter/search/sort logic, and the current analyzer layout. This task is about resilient UI presentation, not a redesign.
+- Keep behavior compatible with large mod packs by deriving all decisions from runtime item metadata and current array lengths or loader counts, never from hardcoded IDs.
 
 ## UI/UX
-- Each filter row should read as a compact radio-style option: indicator on the left, label aligned beside it.
-- Hover feedback should make the entire row feel clickable, not just the text glyphs.
-- Selected and unselected states should remain legible against the current panel colors without overwhelming the rest of the analyzer UI.
-- The sidebar should look stable and aligned even with longer labels like `Accessories`.
+- No layout or wording changes are required.
+- The analyzer should look the same to the player except that the first-open error disappears.
+- If a specific item icon cannot be drawn safely in a given frame, the slot or tree row should still show its text and remain usable rather than collapsing the whole UI interaction.
 
 ## Success Criteria
-- [ ] The category filter sidebar no longer displays literal `[ ]` or `[*]` markers.
-- [ ] The currently selected category is communicated through a graphical indicator and consistent row styling.
-- [ ] Clicking a category still updates the visible top-tier item list using the existing filter logic.
-- [ ] Search, sort, pagination reset, and selected-item clearing behavior remain unchanged after switching filters.
-- [ ] No new texture assets or item-ID-specific logic are added for this feature.
+- [ ] Opening `Analyze Recipes` from the Steroid Guide in a fresh world session no longer prints `Index was outside the bounds of the array` to chat.
+- [ ] The same fix works when the craftable results include modded items from other content mods.
+- [ ] The top-tier item grid and recipe tree can both render after the first open without client-side exceptions.
+- [ ] Search, sort, pagination, selection, and recipe-tree interactions still work after the fix.
+- [ ] No item-ID hardcoding or mod-specific compatibility shims are introduced.
 
 ## Out of Scope
-- Redesigning the sort dropdown or converting its text markers in the same task.
-- Changing category definitions, adding new categories, or altering `GetItemCategory(...)`.
-- Reworking analyzer layout, pagination, recipe tree rendering, or NPC interactions.
+- Changing category definitions, search UX, pagination visuals, or recipe-tree styling.
+- Rewriting the recursive recipe analyzer or top-tier filtering rules.
+- Adding telemetry, config toggles, or a separate user-facing error UI for analyzer failures.
