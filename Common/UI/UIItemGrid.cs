@@ -140,10 +140,11 @@ namespace SteroidGuide.Common.UI
                         DrawBorder(spriteBatch, cellRect, new Color(180, 180, 180, 200), 1);
                     }
 
-                    var hoverItem = new Item();
-                    hoverItem.SetDefaults(itemId);
-                    Main.HoverItem = hoverItem.Clone();
-                    Main.hoverItemName = hoverItem.Name;
+                    if (UIItemRenderingHelper.TryCreateDisplayItem(itemId, out Item hoverItem))
+                    {
+                        Main.HoverItem = hoverItem.Clone();
+                        Main.hoverItemName = hoverItem.Name;
+                    }
                 }
             }
 
@@ -157,9 +158,7 @@ namespace SteroidGuide.Common.UI
 
         private static void DrawItemName(SpriteBatch spriteBatch, int itemId, float x, float y, float maxWidth)
         {
-            var item = new Item();
-            item.SetDefaults(itemId);
-            string name = item.Name;
+            string name = UIItemRenderingHelper.GetDisplayNameOrFallback(itemId);
 
             float scale = 0.6f;
 
@@ -188,22 +187,7 @@ namespace SteroidGuide.Common.UI
 
         private static void DrawItemIcon(SpriteBatch spriteBatch, int itemId, Vector2 center)
         {
-            Main.instance.LoadItem(itemId);
-            var texture = TextureAssets.Item[itemId].Value;
-
-            Rectangle frame;
-            if (Main.itemAnimations[itemId] != null)
-                frame = Main.itemAnimations[itemId].GetFrame(texture);
-            else
-                frame = texture.Frame();
-
-            float maxDim = 32f;
-            float scale = 1f;
-            if (frame.Width > maxDim || frame.Height > maxDim)
-                scale = maxDim / Math.Max(frame.Width, frame.Height);
-
-            spriteBatch.Draw(texture, center, frame, Color.White, 0f,
-                frame.Size() / 2f, scale, SpriteEffects.None, 0f);
+            UIItemRenderingHelper.TryDrawItemIcon(spriteBatch, itemId, center, 32f);
         }
 
         private static void DrawBorder(SpriteBatch spriteBatch, Rectangle rect, Color color, int thickness)

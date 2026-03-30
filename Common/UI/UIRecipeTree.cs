@@ -383,21 +383,18 @@ namespace SteroidGuide.Common.UI
                 // Draw item icon (20x20)
                 const float iconSize = 20f;
                 float iconX = contentX + triangleWidth + iconSize / 2f;
-                DrawItemIcon(spriteBatch, _itemId, new Vector2(iconX, centerY), iconSize);
+                UIItemRenderingHelper.TryDrawItemIcon(spriteBatch, _itemId, new Vector2(iconX, centerY), iconSize);
 
                 // Draw item name + suffix
                 float textX = contentX + triangleWidth + iconSize + 4f;
-                var item = new Item();
-                item.SetDefaults(_itemId);
-                string text = item.Name + _suffix;
+                string text = UIItemRenderingHelper.GetDisplayNameOrFallback(_itemId) + _suffix;
                 Utils.DrawBorderString(spriteBatch, text, new Vector2(textX, centerY - 8f), _color, _scale);
 
                 // Hover tooltip
                 var rect = dims.ToRectangle();
-                if (rect.Contains(Main.mouseX, Main.mouseY))
+                if (rect.Contains(Main.mouseX, Main.mouseY) &&
+                    UIItemRenderingHelper.TryCreateDisplayItem(_itemId, out Item hoverItem))
                 {
-                    var hoverItem = new Item();
-                    hoverItem.SetDefaults(_itemId);
                     Main.HoverItem = hoverItem.Clone();
                     Main.hoverItemName = hoverItem.Name;
                 }
@@ -476,25 +473,6 @@ namespace SteroidGuide.Common.UI
                     new Rectangle((int)connX, (int)(centerY - LineThickness / 2f),
                         (int)(horzRight - connX), LineThickness),
                     LineColor);
-            }
-
-            private static void DrawItemIcon(SpriteBatch spriteBatch, int itemId, Vector2 center, float maxDim)
-            {
-                Main.instance.LoadItem(itemId);
-                var texture = TextureAssets.Item[itemId].Value;
-
-                Rectangle frame;
-                if (Main.itemAnimations[itemId] != null)
-                    frame = Main.itemAnimations[itemId].GetFrame(texture);
-                else
-                    frame = texture.Frame();
-
-                float scale = 1f;
-                if (frame.Width > maxDim || frame.Height > maxDim)
-                    scale = maxDim / Math.Max(frame.Width, frame.Height);
-
-                spriteBatch.Draw(texture, center, frame, Color.White, 0f,
-                    frame.Size() / 2f, scale, SpriteEffects.None, 0f);
             }
         }
 
