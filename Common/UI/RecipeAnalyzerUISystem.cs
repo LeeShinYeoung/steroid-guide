@@ -68,6 +68,12 @@ namespace SteroidGuide.Common.UI
             bool escDown = Main.keyState.IsKeyDown(Keys.Escape);
             if (escDown && !_escWasDown)
             {
+                if (AnalyzerState?.HandleEscapeKey() == true)
+                {
+                    _escWasDown = escDown;
+                    return;
+                }
+
                 HideUI();
                 // Prevent inventory from opening on the same ESC press
                 Main.playerInventory = false;

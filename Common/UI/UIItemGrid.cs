@@ -12,10 +12,10 @@ namespace SteroidGuide.Common.UI
     {
         private List<int> _items = new();
         private int _selectedItemId = -1;
-        private const int Rows = 4;
         private const float CellWidth = 48f;
         private const float CellHeight = 60f;
         private const float CellPadding = 6f;
+        private string _emptyStateText = "No craftable items found.";
 
         public event Action<int> OnItemSelected;
 
@@ -35,12 +35,30 @@ namespace SteroidGuide.Common.UI
             }
         }
 
+        public int Rows
+        {
+            get
+            {
+                float availableHeight = GetDimensions().Height;
+                if (availableHeight <= 0f)
+                    return 1;
+
+                int rows = Math.Max(1, (int)((availableHeight + CellPadding) / (CellHeight + CellPadding)));
+                return rows;
+            }
+        }
+
         public int ItemsPerPage => Columns * Rows;
 
         public void SetItems(List<int> items, int selectedId)
         {
             _items = items ?? new List<int>();
             _selectedItemId = selectedId;
+        }
+
+        public void SetEmptyStateText(string emptyStateText)
+        {
+            _emptyStateText = emptyStateText ?? string.Empty;
         }
 
         public override void LeftClick(UIMouseEvent evt)
@@ -55,7 +73,8 @@ namespace SteroidGuide.Common.UI
             int row = (int)(relY / (CellHeight + CellPadding));
 
             int columns = Columns;
-            if (col >= 0 && col < columns && row >= 0 && row < Rows)
+            int rows = Rows;
+            if (col >= 0 && col < columns && row >= 0 && row < rows)
             {
                 int index = row * columns + col;
                 if (index < _items.Count)
@@ -72,7 +91,8 @@ namespace SteroidGuide.Common.UI
             float startY = dims.Y;
 
             int columns = Columns;
-            for (int i = 0; i < _items.Count && i < columns * Rows; i++)
+            int rows = Rows;
+            for (int i = 0; i < _items.Count && i < columns * rows; i++)
             {
                 int row = i / columns;
                 int col = i % columns;
@@ -130,7 +150,7 @@ namespace SteroidGuide.Common.UI
             // Empty state
             if (_items.Count == 0)
             {
-                Utils.DrawBorderString(spriteBatch, "No craftable items found.",
+                Utils.DrawBorderString(spriteBatch, _emptyStateText,
                     new Vector2(startX + 20f, startY + 80f), Color.Gray);
             }
         }

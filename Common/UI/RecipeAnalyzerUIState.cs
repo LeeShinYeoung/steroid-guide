@@ -4,6 +4,7 @@ using Microsoft.Xna.Framework;
 using Terraria;
 using Terraria.GameContent;
 using Terraria.GameContent.UI.Elements;
+using Terraria.Localization;
 using Terraria.ModLoader;
 using Terraria.UI;
 
@@ -43,6 +44,10 @@ namespace SteroidGuide.Common.UI
         private readonly Dictionary<SortCriteria, UIText> _sortOptions = new();
         private bool _sortDropdownOpen;
 
+        // Search
+        private UISearchTextBox _searchTextBox;
+        private string _searchQuery = string.Empty;
+
         // Item grid
         private UIItemGrid _itemGrid;
         private UIElement _paginationRow;
@@ -56,6 +61,7 @@ namespace SteroidGuide.Common.UI
         // State
         private AnalysisResult _analysisResult;
         private Dictionary<int, int> _lastScannedItems;
+        private readonly Dictionary<int, string> _normalizedItemNames = new();
         private List<int> _filteredItems = new();
         private int _currentPage;
         private int _totalPages = 1;
@@ -141,12 +147,23 @@ namespace SteroidGuide.Common.UI
             // Start hidden
             // _sortDropdownPanel is only appended when dropdown is open
 
+            // ── Search box ──
+            _searchTextBox = new UISearchTextBox(
+                Language.GetTextValue("Mods.SteroidGuide.UI.SearchPlaceholder"),
+                Language.GetTextValue("Mods.SteroidGuide.UI.SearchClear"));
+            _searchTextBox.Top.Set(42f, 0f);
+            _searchTextBox.Left.Set(132f, 0f);
+            _searchTextBox.Width.Set(650f, 0f);
+            _searchTextBox.Height.Set(32f, 0f);
+            _searchTextBox.OnTextChanged += OnSearchTextChanged;
+            _mainPanel.Append(_searchTextBox);
+
             // ── Item grid ──
             _itemGrid = new UIItemGrid();
-            _itemGrid.Top.Set(42f, 0f);
+            _itemGrid.Top.Set(80f, 0f);
             _itemGrid.Left.Set(132f, 0f);
             _itemGrid.Width.Set(650f, 0f);
-            _itemGrid.Height.Set(264f, 0f);
+            _itemGrid.Height.Set(226f, 0f);
             _itemGrid.OnItemSelected += OnItemSelected;
             _mainPanel.Append(_itemGrid);
 
@@ -194,6 +211,8 @@ namespace SteroidGuide.Common.UI
             _lastScannedItems = null;
             _selectedItemId = -1;
             _currentPage = 0;
+            _searchQuery = string.Empty;
+            _searchTextBox?.Reset();
             _recipeTree?.ClearTree();
             RunAnalysis();
         }
@@ -235,6 +254,7 @@ namespace SteroidGuide.Common.UI
             if (graph == null || _lastScannedItems == null) return;
 
             _analysisResult = RecipeAnalyzer.Analyze(graph, _lastScannedItems);
+            RebuildItemNameCache();
             ApplyFilter();
         }
 
@@ -281,11 +301,22 @@ namespace SteroidGuide.Common.UI
         {
             if (_analysisResult == null) return;
 
+            string normalizedQuery = NormalizeSearchText(_searchQuery);
+            bool hasSearchQuery = normalizedQuery.Length > 0;
+
             _filteredItems.Clear();
             foreach (int itemId in _analysisResult.TopTierItems)
             {
-                if (_currentFilter == FilterCategory.All || GetItemCategory(itemId) == _currentFilter)
-                    _filteredItems.Add(itemId);
+                if (_currentFilter != FilterCategory.All && GetItemCategory(itemId) != _currentFilter)
+                    continue;
+
+                if (hasSearchQuery && (!_normalizedItemNames.TryGetValue(itemId, out string normalizedName) ||
+                    !normalizedName.Contains(normalizedQuery, StringComparison.Ordinal)))
+                {
+                    continue;
+                }
+
+                _filteredItems.Add(itemId);
             }
 
             // Apply sorting
@@ -302,9 +333,10 @@ namespace SteroidGuide.Common.UI
                     }
                     case SortCriteria.Name:
                     {
-                        var itemA = new Item(); itemA.SetDefaults(a);
-                        var itemB = new Item(); itemB.SetDefaults(b);
-                        return string.Compare(itemA.Name, itemB.Name, StringComparison.Ordinal);
+                        _normalizedItemNames.TryGetValue(a, out string nameA);
+                        _normalizedItemNames.TryGetValue(b, out string nameB);
+                        int cmp = string.Compare(nameA, nameB, StringComparison.Ordinal);
+                        return cmp != 0 ? cmp : a.CompareTo(b);
                     }
                     case SortCriteria.Value:
                     {
@@ -329,8 +361,16 @@ namespace SteroidGuide.Common.UI
                 }
             });
 
+            if (_selectedItemId != -1 && !_filteredItems.Contains(_selectedItemId))
+            {
+                _selectedItemId = -1;
+                _recipeTree?.ClearTree();
+            }
+
             _currentPage = 0;
             _totalPages = Math.Max(1, (_filteredItems.Count + ItemsPerPage - 1) / ItemsPerPage);
+            _itemGrid?.SetEmptyStateText(Language.GetTextValue(
+                hasSearchQuery ? "Mods.SteroidGuide.UI.SearchNoResults" : "Mods.SteroidGuide.UI.NoCraftableItems"));
             UpdateGrid();
             UpdatePageText();
         }
@@ -412,6 +452,40 @@ namespace SteroidGuide.Common.UI
             if (item.potion || item.buffType > 0) return FilterCategory.Potions;
             if (item.pick > 0 || item.axe > 0 || item.hammer > 0) return FilterCategory.Tools;
             return FilterCategory.Misc;
+        }
+
+        public bool HandleEscapeKey()
+        {
+            return _searchTextBox?.HandleEscape() ?? false;
+        }
+
+        private void OnSearchTextChanged(string query)
+        {
+            _searchQuery = query ?? string.Empty;
+            ApplyFilter();
+        }
+
+        private void RebuildItemNameCache()
+        {
+            _normalizedItemNames.Clear();
+            if (_analysisResult == null)
+            {
+                return;
+            }
+
+            foreach (int itemId in _analysisResult.TopTierItems)
+            {
+                var item = new Item();
+                item.SetDefaults(itemId);
+                _normalizedItemNames[itemId] = NormalizeSearchText(item.Name);
+            }
+        }
+
+        private static string NormalizeSearchText(string text)
+        {
+            return string.IsNullOrWhiteSpace(text)
+                ? string.Empty
+                : text.Trim().ToUpperInvariant();
         }
 
         private static bool DictEquals(Dictionary<int, int> a, Dictionary<int, int> b)
