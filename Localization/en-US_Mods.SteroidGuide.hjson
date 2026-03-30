@@ -18,3 +18,10 @@ NPCs: {
 		}
 	}
 }
+
+UI: {
+	SearchPlaceholder: Search craftable items...
+	SearchClear: Clear
+	SearchNoResults: No craftable items match the current query.
+	NoCraftableItems: No craftable items found.
+}
