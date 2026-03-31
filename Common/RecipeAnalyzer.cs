@@ -18,6 +18,7 @@ namespace SteroidGuide.Common
         public int RequiredCount;
         public NodeStatus Status;
         public int OwnedCount;
+        public bool IgnoreOwnedForCraftability;
         public Recipe UsedRecipe;
         public List<RecipeTreeNode> Children = new();
         public List<Recipe> AlternativeRecipes = new();
@@ -41,7 +42,7 @@ namespace SteroidGuide.Common
                 var visiting = new HashSet<int>();
                 // Each top-level item gets its own copy so items are independently evaluated
                 var availableCopy = new Dictionary<int, int>(available);
-                if (CanCraft(itemId, 1, graph, availableCopy, visiting, noRecipeCache, requireRecipe: true))
+                if (CanCraftRootItem(itemId, 1, graph, availableCopy, visiting, noRecipeCache))
                 {
                     result.AllCraftable.Add(itemId);
                 }
@@ -71,12 +72,20 @@ namespace SteroidGuide.Common
             return result;
         }
 
+        private static bool CanCraftRootItem(int itemId, int needed, RecipeGraphData graph,
+            Dictionary<int, int> available, HashSet<int> visiting, HashSet<int> noRecipeCache)
+        {
+            return CanCraft(itemId, needed, graph, available, visiting, noRecipeCache, ignoreOwnedForCurrentNode: true);
+        }
+
         private static bool CanCraft(int itemId, int needed, RecipeGraphData graph,
             Dictionary<int, int> available, HashSet<int> visiting, HashSet<int> noRecipeCache,
-            bool requireRecipe = false)
+            bool ignoreOwnedForCurrentNode = false)
         {
             available.TryGetValue(itemId, out int owned);
-            if (!requireRecipe && owned >= needed)
+            int usableOwned = ignoreOwnedForCurrentNode ? 0 : owned;
+
+            if (usableOwned >= needed)
             {
                 // Consume from available to prevent double-counting
                 available[itemId] = owned - needed;
@@ -98,7 +107,7 @@ namespace SteroidGuide.Common
 
             visiting.Add(itemId);
             bool result = false;
-            int remaining = needed - owned;
+            int remaining = needed - usableOwned;
 
             foreach (var recipe in recipes)
             {
@@ -106,7 +115,7 @@ namespace SteroidGuide.Common
                 var saved = new Dictionary<int, int>(available);
 
                 // Consume the owned portion first
-                if (owned > 0)
+                if (usableOwned > 0)
                     available[itemId] = 0;
 
                 int batchSize = Math.Max(1, recipe.createItem.stack);
@@ -176,7 +185,8 @@ namespace SteroidGuide.Common
         }
 
         public static RecipeTreeNode BuildRecipeTree(int itemId, int needed,
-            RecipeGraphData graph, Dictionary<int, int> available, HashSet<int> visiting = null)
+            RecipeGraphData graph, Dictionary<int, int> available, HashSet<int> visiting = null,
+            bool ignoreOwnedForCurrentNode = false)
         {
             visiting ??= new HashSet<int>();
 
@@ -185,10 +195,13 @@ namespace SteroidGuide.Common
             {
                 ItemId = itemId,
                 RequiredCount = needed,
-                OwnedCount = ownedCount
+                OwnedCount = ownedCount,
+                IgnoreOwnedForCraftability = ignoreOwnedForCurrentNode
             };
 
-            if (ownedCount >= needed)
+            int usableOwnedCount = ignoreOwnedForCurrentNode ? 0 : ownedCount;
+
+            if (usableOwnedCount >= needed)
             {
                 node.Status = NodeStatus.Owned;
                 return node;
@@ -204,7 +217,7 @@ namespace SteroidGuide.Common
 
             if (graph.RecipesByResult.TryGetValue(itemId, out var recipes))
             {
-                int remaining = needed - ownedCount;
+                int remaining = needed - usableOwnedCount;
                 bool foundViable = false;
 
                 foreach (var recipe in recipes)
