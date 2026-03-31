@@ -295,28 +295,44 @@ namespace SteroidGuide.Common.UI
 
         private static string GetTileName(int tileId)
         {
-            // Try modded tile first
+            if (TryGetMapObjectName(tileId, out string mapObjectName))
+                return mapObjectName;
+
             ModTile modTile = TileLoader.GetTile(tileId);
             if (modTile != null)
             {
-                if (!string.IsNullOrWhiteSpace(modTile.Name))
-                    return modTile.Name;
+                string localizedMapEntry = modTile.GetLocalizedValue("MapEntry");
+                string mapEntryKey = modTile.GetLocalizationKey("MapEntry");
+                if (!string.IsNullOrWhiteSpace(localizedMapEntry) &&
+                    !string.Equals(localizedMapEntry, mapEntryKey, StringComparison.Ordinal))
+                {
+                    return localizedMapEntry;
+                }
             }
 
-            // Vanilla: use map object name
+            return $"Tile #{tileId}";
+        }
+
+        private static bool TryGetMapObjectName(int tileId, out string tileName)
+        {
+            tileName = string.Empty;
+
             try
             {
                 int lookup = MapHelper.TileToLookup(tileId, 0);
                 string name = Lang.GetMapObjectName(lookup);
-                if (!string.IsNullOrEmpty(name))
-                    return name;
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    tileName = name;
+                    return true;
+                }
             }
             catch
             {
-                // Fallback
+                // Some tiles may not expose a map lookup entry. Leave the localized fallback to the caller.
             }
 
-            return $"Tile #{tileId}";
+            return false;
         }
 
         private static string ResolveLocalizedText(string key, string fallback)

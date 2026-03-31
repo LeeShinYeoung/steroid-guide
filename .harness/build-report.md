@@ -1,17 +1,16 @@
 # Build Report
 
 ## Implemented
-- [x] Replaced recipe-tree crafting-station prose with an icon-first station row that resolves per-tile display items dynamically, falls back to station-name badges, and refreshes with alternative recipe swaps.
+- [x] Fixed station fallback name resolution so modded crafting stations use localized map-entry names instead of internal mod tile identifiers.
 
 ## Files Changed
-- `Common/UI/UIRecipeTree.cs` — added cached tile-to-item resolution, station-row rendering, hover/fallback handling, and moved station rows directly under the active recipe node.
-- `Localization/en-US_Mods.SteroidGuide.hjson` — added the compact localized station label used by the recipe tree.
+- `Common/UI/UIRecipeTree.cs` — changed tile-name resolution to prefer map-entry/localized names for every station fallback badge and hover label, including modded tiles.
 
 ## How to Test
 1. Build with tModLoader using `dotnet build -p:TModLoaderTargetsPath=/Users/sy/.local/share/tModLoader/tMLMod.targets`.
-2. Open the Steroid Guide UI and select craftable items with recipes that require one or multiple stations.
-3. Verify the recipe tree shows a `Station` badge row with item icons where available, fallback name pills when not, and matching station names on hover.
-4. Swap to an alternative recipe and confirm the station row updates immediately to the new recipe's required stations.
+2. Open the Steroid Guide UI and select a craftable item whose active recipe requires a modded crafting station without a resolved representative icon.
+3. Verify the station fallback badge and hover text show the player-facing localized station name rather than the mod tile's internal type name.
+4. Swap to an alternative recipe and confirm the displayed station names still refresh to the currently active `UsedRecipe`.
 
 ## Known Issues
 - None noted from build verification.
