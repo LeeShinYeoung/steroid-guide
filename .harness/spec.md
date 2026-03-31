@@ -1,51 +1,45 @@
-# Spec: Crafting Station Icon-First Recipe Tree UI
+# Spec: Fix Craftable Item Eligibility and Recipe Tree Consistency
 
 ## Summary
-Replace the recipe tree's plain-text crafting-station lines with an icon-first presentation that is faster to scan and easier to understand. Players should be able to recognize required stations at a glance without losing clarity about what the icons mean.
+Ensure the craftable item list only contains items the player can produce through an actual recipe chain from the currently scanned inventory and nearby chests. Fix the recipe tree so selecting a listed item always shows its crafting path even when the player already owns one or more copies of that result item.
 
 ## Detailed Requirements
-1. Every recipe tree node that currently shows crafting-station text must render a dedicated station row for its active `Recipe`, including the root recipe and expanded child recipes.
-2. The station row must communicate "this recipe needs a crafting station" without relying on a long `"Crafting Station: ..."` sentence. Short supporting text is allowed, but the primary affordance must be graphical.
-3. Each required station in `Recipe.requiredTile` must be represented individually. Recipes with multiple required tiles must show multiple station entries in the same row or grouped station block.
-4. Station visuals must be derived dynamically from game data and remain compatible with modded content. The implementation must not hardcode vanilla or mod item IDs.
-5. When a representative item icon can be resolved for a required tile, that icon must be drawn using the existing item-icon rendering path so vanilla/modded station items look consistent with the rest of the UI.
-6. When no representative item icon can be resolved, the station row must still render a stable fallback using the resolved tile name, and the UI must not fail or leave the station area blank.
-7. Hovering a station icon or fallback entry must expose the station name clearly, either through tooltip behavior or adjacent label treatment, so players do not have to guess what a station icon means.
-8. The station row must respect the current recipe-tree indentation and scrolling model. It must remain visually associated with the node whose recipe it describes and must not break connector-line rendering or `UIList` scrolling.
-9. Alternative-recipe swapping must refresh the station presentation immediately so the displayed station set always matches the currently active `UsedRecipe`.
-10. Existing condition lines and alternative-recipe controls must continue to work. This change is limited to the crafting-station presentation, not recipe logic.
+1. Top-tier item analysis must treat the selected result item as something to craft, not something already satisfied by direct ownership. Existing copies of the root result item must not make that item eligible for `AllCraftable` or `TopTierItems`.
+2. Intermediate ingredients must continue to use currently owned stacks exactly as they do today. The ownership exclusion applies only to the root result item being evaluated for list inclusion or tree expansion.
+3. Items that are merely owned, but cannot currently be produced through any valid recipe chain, must be excluded from the craftable item list even if they have recipes registered in `Main.recipe[]`.
+4. Items that are both already owned and still craftable from the current materials must remain in the craftable item list.
+5. Selecting an item from the craftable item list must build a non-empty recipe tree whenever a valid crafting path exists. The root item being owned must not cause the tree to collapse to a single node.
+6. The recipe tree must use the same craftability rule as list analysis so the selected item’s status, children, and alternative recipe behavior stay consistent with the analyzer result.
+7. The fallback tree shown for missing paths must continue to surface missing ingredients and recipe conditions for debugging the path, but it must not rely on root-item ownership to mark a result as craftable.
+8. The fix must remain data-driven and mod-compatible. No hardcoded item IDs, recipe IDs, or mod-specific exceptions are allowed.
 
 ## Technical Design
-- Modify `Common/UI/UIRecipeTree.cs` to replace the current text-only `AddCraftingStationLine(...)` flow with a richer tree child element that can render a compact station badge/row with icons plus short context text.
-- Add a small station-display model or helper within the UI layer to resolve, per required tile:
-  - tile display name via the existing `TileLoader.GetTile(...)` / `MapHelper.TileToLookup(...)` / `Lang.GetMapObjectName(...)` fallback chain
-  - representative item id by scanning valid item definitions and matching `Item.createTile` to the required tile id
-- Cache the tile-to-item resolution so recipe-tree redraws and alternative-recipe swaps do not rescan the full item set every frame.
-- Reuse `UIItemRenderingHelper.TryDrawItemIcon(...)` and `TryCreateDisplayItem(...)` for icon drawing and hover item setup so station icons inherit the same safety checks already used by item rows.
-- Keep the new presentation in the existing UI layer only. No changes are required in `RecipeAnalyzer`, `RecipeGraphSystem`, `ItemScanner`, NPC logic, or world systems because the feature is purely presentational.
-- Preserve current tree behaviors:
-  - `Recipe.requiredTile` remains the source of required stations
-  - `UIList`/`UIScrollbar` still handle vertical scrolling
-  - `SwapAlternativeRecipe(...)` and `SetTree(...)` remain the re-render path after recipe changes
-- Likely files:
-  - `Common/UI/UIRecipeTree.cs` for the new station row element and integration
-  - `Common/UI/UIItemRenderingHelper.cs` only if a small shared hover/icon helper is needed for station entries
-  - `Localization/en-US_Mods.SteroidGuide.hjson` only if a short reusable station label is introduced
+- Modify [Common/RecipeAnalyzer.cs](/Users/sy/projects/steroid-guide/Common/RecipeAnalyzer.cs) to separate two concepts that are currently conflated:
+  - satisfying a requirement from owned stacks
+  - producing a new copy of the target item through a recipe
+- Introduce an internal evaluation path for root-item analysis that ignores owned copies of the root result item while still allowing owned intermediate ingredients to satisfy recursive requirements. The implementation can be a dedicated top-level method or a structured evaluation result passed into `CanCraft(...)`, but it must make the root/child distinction explicit.
+- Keep `AnalysisResult.AllCraftable` and `AnalysisResult.TopTierItems` semantics aligned with the mod spec: membership means “craftable via recipe now,” not “owned or craftable.”
+- Update the top-tier filter in [Common/RecipeAnalyzer.cs](/Users/sy/projects/steroid-guide/Common/RecipeAnalyzer.cs) to continue using the recipe-produced craftable set after the eligibility fix; no change to `RecipeGraphSystem.ItemUsedInResults` is required.
+- Update [Common/UI/RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) so `OnItemSelected(...)` requests a recipe tree using the same root-item rule as the analyzer. The selected root item may still display its owned count for context, but tree expansion must be based on recipe viability, not the early owned short-circuit.
+- Update [Common/RecipeAnalyzer.cs](/Users/sy/projects/steroid-guide/Common/RecipeAnalyzer.cs) `BuildRecipeTree(...)` so the root node can show recipe children and `UsedRecipe` even when `OwnedCount >= RequiredCount`, while child nodes continue to return `Owned` when direct ownership satisfies the requirement.
+- Ensure recipe swapping in [Common/UI/UIRecipeTree.cs](/Users/sy/projects/steroid-guide/Common/UI/UIRecipeTree.cs) rebuilds children with the same root-evaluation rule so swapping does not reintroduce the empty-tree behavior.
+- No changes are required to [Common/RecipeGraphSystem.cs](/Users/sy/projects/steroid-guide/Common/RecipeGraphSystem.cs) DAG construction, [Common/ItemScanner.cs](/Users/sy/projects/steroid-guide/Common/ItemScanner.cs) chest scanning, or any tModLoader hook usage beyond the existing `ModSystem.PostAddRecipes()`, UI `OnShow()`, and UI selection/update flow.
 
 ## UI/UX
-- Replace the current sentence-style station line with a compact station row that reads as a labeled group, such as a small "Station" caption plus one or more framed item icons.
-- Keep text secondary: icons should carry most of the recognition burden, while hover or a short caption provides disambiguation.
-- Use spacing, tint, or a subtle container so the station block feels intentional and distinct from ingredient nodes, but still belongs to the same recipe-tree branch.
-- For multiple stations, present them as a tidy horizontal sequence instead of comma-separated prose.
+- No layout redesign is required.
+- The existing item list, pagination, and recipe-tree presentation remain unchanged.
+- The user-facing behavioral change is:
+  - items already owned but not currently craftable disappear from the craftable list
+  - items already owned and still craftable remain selectable and show their recipe tree normally
 
 ## Success Criteria
-- [ ] Recipe tree entries no longer show raw `Crafting Station: ...` sentences for required stations; they show an icon-first station presentation instead.
-- [ ] Vanilla and modded crafting stations are resolved dynamically without hardcoded item ids.
-- [ ] Recipes with multiple required stations display every station in the active recipe.
-- [ ] Swapping to an alternative recipe updates the shown station icons/names immediately.
-- [ ] If an icon cannot be resolved for a station, the UI still renders a clear fallback name and remains stable.
+- [ ] With wood in inventory and iron bars in a nearby scanned chest, `Chest` appears in the craftable list only if it is actually craftable through its recipe, and selecting it shows the expected recipe tree instead of a single root node.
+- [ ] Owning a final weapon or tool without the remaining ingredients to craft another copy does not cause that item to appear in `TopTierItems`.
+- [ ] Owning one or more copies of a result item does not prevent the UI from showing its crafting station row and ingredient children when a valid recipe path still exists.
+- [ ] Alternative recipe swapping preserves correct `Craftable` vs `Missing` child statuses under the new root-item rule.
 
 ## Out of Scope
-- Redesigning ingredient-node visuals, connector lines, or recipe-tree collapse behavior.
-- Changing recipe analysis, craftability rules, or alternative-recipe selection logic.
-- Adding new gameplay systems, new stations, or custom mod content.
+- Expanding the scanned storage sources beyond current inventory and on-screen chests
+- Reworking category filters, sorting, search, or pagination behavior
+- Adding new UI chrome, badges, or redesigning the recipe tree visuals
+- Performance optimizations beyond the refactor needed to make root craftability explicit

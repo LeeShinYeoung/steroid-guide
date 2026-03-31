@@ -197,7 +197,8 @@ namespace SteroidGuide.Common.UI
             if (_currentGraph != null && _currentAvailable != null)
             {
                 node.Children.Clear();
-                int remaining = Math.Max(1, node.RequiredCount - node.OwnedCount);
+                int usableOwnedCount = node.IgnoreOwnedForCraftability ? 0 : node.OwnedCount;
+                int remaining = Math.Max(1, node.RequiredCount - usableOwnedCount);
                 int batchSize = Math.Max(1, node.UsedRecipe.createItem.stack);
                 int batches = (remaining + batchSize - 1) / batchSize;
 

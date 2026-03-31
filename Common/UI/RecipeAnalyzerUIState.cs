@@ -478,7 +478,12 @@ namespace SteroidGuide.Common.UI
 
             if (_lastScannedItems != null && RecipeGraphSystem.Graph != null)
             {
-                var tree = RecipeAnalyzer.BuildRecipeTree(itemId, 1, RecipeGraphSystem.Graph, _lastScannedItems);
+                var tree = RecipeAnalyzer.BuildRecipeTree(
+                    itemId,
+                    1,
+                    RecipeGraphSystem.Graph,
+                    _lastScannedItems,
+                    ignoreOwnedForCurrentNode: true);
                 _recipeTree?.SetTree(tree, RecipeGraphSystem.Graph, _lastScannedItems);
             }
         }
