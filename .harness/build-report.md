@@ -1,20 +1,16 @@
 # Build Report
 
 ## Implemented
-- [x] Kept nested recipe-tree nodes rendering their selected `UsedRecipe` details and `Alternative Recipe` action even after switching to a non-craftable alternative.
-- [x] Replaced the recipe-tree `Alternative Recipe` text-glyph affordance with a dedicated graphical action row so root and nested toggles present as UI controls instead of clickable text characters.
+- [x] Replaced the pagination arrow button's rotated-line chevron with a mirrored, pixel-stable stepped arrow glyph rendered from integer `MagicPixel` rectangles.
 
 ## Files Changed
-- `Common/UI/UIRecipeTree.cs` — kept persistent nested alternative-recipe behavior in place and converted the root/child `Alternative Recipe` rows into framed graphic action controls with a drawn chevron.
+- `Common/UI/UIPaginationArrowButton.cs` — replaced rotated line drawing with a centered mirrored rectangle-based arrow profile while preserving button states and frame colors.
 
 ## How to Test
-1. Build with tModLoader.
-2. Open the Steroid Guide analyzer UI in-game and select an item whose recipe tree contains a child node with multiple recipes.
-3. Verify the root and nested `Alternative Recipe` controls render as boxed action rows with a drawn arrow icon rather than a text `▶` glyph.
-4. Expand a child node, click `Alternative Recipe`, and verify the same child still shows its station/condition rows, ingredient subtree, and `Alternative Recipe` control afterward.
-5. Keep clicking the same child node's `Alternative Recipe` control and verify it rotates through the available recipes without the control disappearing.
-6. Switch to an alternative recipe path that is currently missing ingredients and verify the node stays visible with missing-status coloring while still allowing another recipe switch.
-7. Collapse and re-expand the child node and verify the triangle affordance still works based on whether the selected recipe has child ingredients to show.
+1. Build with tModLoader using `dotnet build -p:TModLoaderTargetsPath=/Users/sy/.local/share/tModLoader/tMLMod.targets`.
+2. Open the Steroid Guide UI in-game with enough craftable items to produce multiple pages.
+3. Verify the previous and next buttons render clean, centered mirrored arrows in normal, hover, and disabled states.
+4. Click the arrows and use scroll-wheel pagination to confirm page changes still behave exactly as before.
 
 ## Known Issues
 - None.
