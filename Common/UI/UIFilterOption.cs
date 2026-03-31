@@ -1,3 +1,4 @@
+using System;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Terraria;
@@ -14,8 +15,9 @@ namespace SteroidGuide.Common.UI
         private const float TextScale = 0.75f;
         private const int IndicatorSize = 12;
         private const int IndicatorBorderThickness = 2;
-        private const float IndicatorLeftPadding = 8f;
-        private const float LabelLeftPadding = 28f;
+        private const int RowAccentWidth = 4;
+        private const float IndicatorLeftPadding = 10f;
+        private const float LabelLeftPadding = 32f;
 
         public UIFilterOption(string label)
         {
@@ -35,24 +37,49 @@ namespace SteroidGuide.Common.UI
 
             CalculatedStyle dimensions = GetDimensions();
             Rectangle bounds = dimensions.ToRectangle();
+            Rectangle rowBounds = new(bounds.X, bounds.Y, bounds.Width, Math.Max(0, bounds.Height - 1));
 
             Color backgroundColor = _selected
-                ? new Color(74, 93, 162, 210)
-                : new Color(36, 41, 68, IsMouseHovering ? 190 : 150);
+                ? new Color(78, 98, 172, 222)
+                : IsMouseHovering
+                    ? new Color(46, 56, 90, 214)
+                    : new Color(29, 36, 60, 165);
             Color borderColor = _selected
-                ? new Color(170, 188, 242)
-                : new Color(98, 110, 164, IsMouseHovering ? 210 : 160);
-            Color textColor = _selected ? Color.White : new Color(220, 225, 245);
+                ? new Color(182, 198, 244, 220)
+                : new Color(118, 132, 188, 155);
+            Color separatorColor = _selected
+                ? new Color(180, 194, 238, 210)
+                : IsMouseHovering
+                    ? new Color(110, 124, 176, 170)
+                    : new Color(84, 96, 144, 110);
+            Color accentColor = _selected
+                ? new Color(255, 220, 120)
+                : IsMouseHovering
+                    ? new Color(160, 178, 236)
+                    : new Color(92, 104, 156, 90);
+            Color textColor = _selected
+                ? Color.White
+                : IsMouseHovering
+                    ? new Color(236, 240, 252)
+                    : new Color(220, 225, 245);
             Color indicatorBorderColor = _selected
                 ? new Color(230, 236, 255)
-                : new Color(155, 168, 214);
+                : IsMouseHovering
+                    ? new Color(182, 194, 236)
+                    : new Color(148, 160, 206);
 
-            DrawRect(spriteBatch, bounds, backgroundColor);
-            DrawBorder(spriteBatch, bounds, borderColor, 1);
+            DrawRect(spriteBatch, rowBounds, backgroundColor);
+            DrawRect(spriteBatch, new Rectangle(rowBounds.X, rowBounds.Y, RowAccentWidth, rowBounds.Height), accentColor);
+            DrawRect(spriteBatch, new Rectangle(rowBounds.X, rowBounds.Bottom - 1, rowBounds.Width, 1), separatorColor);
+
+            if (_selected || IsMouseHovering)
+            {
+                DrawBorder(spriteBatch, rowBounds, borderColor, 1);
+            }
 
             var indicatorRect = new Rectangle(
-                (int)(bounds.X + IndicatorLeftPadding),
-                bounds.Center.Y - IndicatorSize / 2,
+                (int)(rowBounds.X + IndicatorLeftPadding),
+                rowBounds.Center.Y - IndicatorSize / 2,
                 IndicatorSize,
                 IndicatorSize);
 
@@ -66,7 +93,10 @@ namespace SteroidGuide.Common.UI
                 DrawRect(spriteBatch, fillRect, new Color(255, 220, 120));
             }
 
-            Vector2 labelPosition = new(bounds.X + LabelLeftPadding, bounds.Y + 4f);
+            Vector2 labelSize = FontAssets.MouseText.Value.MeasureString(_label) * TextScale;
+            Vector2 labelPosition = new(
+                rowBounds.X + LabelLeftPadding,
+                rowBounds.Y + (rowBounds.Height - labelSize.Y) * 0.5f - 1f);
             Utils.DrawBorderString(spriteBatch, _label, labelPosition, textColor, TextScale);
         }
 

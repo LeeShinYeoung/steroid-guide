@@ -26,17 +26,17 @@ namespace SteroidGuide.Common.UI
         private const string SearchClearKey = "Mods.SteroidGuide.UI.SearchClear";
         private const string SearchClearFallback = "Clear";
 
-        private static readonly (FilterCategory Category, string LabelKey)[] FilterDefinitions =
+        private static readonly (FilterCategory Category, string LabelKey, string FallbackLabel)[] FilterDefinitions =
         [
-            (FilterCategory.All, "Mods.SteroidGuide.UI.Filters.All"),
-            (FilterCategory.Weapons, "Mods.SteroidGuide.UI.Filters.Weapons"),
-            (FilterCategory.Armor, "Mods.SteroidGuide.UI.Filters.Armor"),
-            (FilterCategory.Accessories, "Mods.SteroidGuide.UI.Filters.Accessories"),
-            (FilterCategory.Tools, "Mods.SteroidGuide.UI.Filters.Tools"),
-            (FilterCategory.Consumables, "Mods.SteroidGuide.UI.Filters.Consumables"),
-            (FilterCategory.Placeables, "Mods.SteroidGuide.UI.Filters.Placeables"),
-            (FilterCategory.Materials, "Mods.SteroidGuide.UI.Filters.Materials"),
-            (FilterCategory.Misc, "Mods.SteroidGuide.UI.Filters.Misc")
+            (FilterCategory.All, "Mods.SteroidGuide.UI.Filters.All", "All"),
+            (FilterCategory.Weapons, "Mods.SteroidGuide.UI.Filters.Weapons", "Weapons"),
+            (FilterCategory.Armor, "Mods.SteroidGuide.UI.Filters.Armor", "Armor"),
+            (FilterCategory.Accessories, "Mods.SteroidGuide.UI.Filters.Accessories", "Accessories"),
+            (FilterCategory.Tools, "Mods.SteroidGuide.UI.Filters.Tools", "Tools"),
+            (FilterCategory.Consumables, "Mods.SteroidGuide.UI.Filters.Consumables", "Consumables"),
+            (FilterCategory.Placeables, "Mods.SteroidGuide.UI.Filters.Placeables", "Placeables"),
+            (FilterCategory.Materials, "Mods.SteroidGuide.UI.Filters.Materials", "Materials"),
+            (FilterCategory.Misc, "Mods.SteroidGuide.UI.Filters.Misc", "Misc")
         ];
 
         private UIPanel _mainPanel;
@@ -47,7 +47,7 @@ namespace SteroidGuide.Common.UI
 
         // Sort
         private SortCriteria _currentSort = SortCriteria.Rarity;
-        private UIText _sortButton;
+        private UITextPanel<string> _sortButton;
         private UIPanel _sortDropdownPanel;
         private readonly Dictionary<SortCriteria, UIText> _sortOptions = new();
         private bool _sortDropdownOpen;
@@ -82,6 +82,12 @@ namespace SteroidGuide.Common.UI
         private const float FilterPanelTop = 42f;
         private const float FilterOptionStep = 26f;
         private const float FilterPanelPadding = 6f;
+        private const float SidebarPanelWidth = 120f;
+
+        private static readonly Color SidebarPanelBackgroundColor = new(20, 26, 44, 175);
+        private static readonly Color SidebarPanelBorderColor = new(94, 108, 154, 120);
+        private static readonly Color SidebarControlBackgroundColor = new(33, 42, 73, 215);
+        private static readonly Color SidebarControlBorderColor = new(118, 136, 195, 185);
 
         public override void OnInitialize()
         {
@@ -109,15 +115,17 @@ namespace SteroidGuide.Common.UI
             var filterPanel = new UIPanel();
             filterPanel.Top.Set(FilterPanelTop, 0f);
             filterPanel.Left.Set(0f, 0f);
-            filterPanel.Width.Set(120f, 0f);
+            filterPanel.Width.Set(SidebarPanelWidth, 0f);
             filterPanel.Height.Set(FilterDefinitions.Length * FilterOptionStep + FilterPanelPadding, 0f);
             filterPanel.SetPadding(FilterPanelPadding);
+            filterPanel.BackgroundColor = SidebarPanelBackgroundColor;
+            filterPanel.BorderColor = SidebarPanelBorderColor;
             _mainPanel.Append(filterPanel);
 
             float filterY = 0f;
             foreach (var filterDefinition in FilterDefinitions)
             {
-                var btn = new UIFilterOption(Language.GetTextValue(filterDefinition.LabelKey));
+                var btn = new UIFilterOption(ResolveLocalizedText(filterDefinition.LabelKey, filterDefinition.FallbackLabel));
                 btn.Top.Set(filterY, 0f);
                 var captured = filterDefinition.Category;
                 btn.OnLeftClick += (evt, el) => SetFilter(captured);
@@ -128,19 +136,25 @@ namespace SteroidGuide.Common.UI
             }
 
             // ── Sort dropdown (below filter sidebar) ──
-            _sortButton = new UIText($"Sort: {_currentSort} \u25BC", 0.7f);
+            _sortButton = new UITextPanel<string>($"Sort: {_currentSort} \u25BC", 0.7f, false);
             _sortButton.Top.Set(FilterPanelTop + FilterDefinitions.Length * FilterOptionStep + 12f, 0f);
-            _sortButton.Left.Set(6f, 0f);
-            _sortButton.Width.Set(108f, 0f);
+            _sortButton.Left.Set(0f, 0f);
+            _sortButton.Width.Set(SidebarPanelWidth, 0f);
+            _sortButton.Height.Set(28f, 0f);
+            _sortButton.SetPadding(6f);
+            _sortButton.BackgroundColor = SidebarControlBackgroundColor;
+            _sortButton.BorderColor = SidebarControlBorderColor;
             _sortButton.OnLeftClick += (evt, el) => ToggleSortDropdown();
             _mainPanel.Append(_sortButton);
 
             _sortDropdownPanel = new UIPanel();
-            _sortDropdownPanel.Top.Set(FilterPanelTop + FilterDefinitions.Length * FilterOptionStep + 34f, 0f);
+            _sortDropdownPanel.Top.Set(FilterPanelTop + FilterDefinitions.Length * FilterOptionStep + 40f, 0f);
             _sortDropdownPanel.Left.Set(0f, 0f);
-            _sortDropdownPanel.Width.Set(120f, 0f);
+            _sortDropdownPanel.Width.Set(SidebarPanelWidth, 0f);
             _sortDropdownPanel.Height.Set(112f, 0f);
             _sortDropdownPanel.SetPadding(6f);
+            _sortDropdownPanel.BackgroundColor = SidebarPanelBackgroundColor;
+            _sortDropdownPanel.BorderColor = SidebarPanelBorderColor;
 
             float sortY = 0f;
             foreach (SortCriteria sort in Enum.GetValues(typeof(SortCriteria)))
