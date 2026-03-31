@@ -21,6 +21,11 @@ namespace SteroidGuide.Common.UI
 
     public class RecipeAnalyzerUIState : UIState
     {
+        private const string SearchPlaceholderKey = "Mods.SteroidGuide.UI.SearchPlaceholder";
+        private const string SearchPlaceholderFallback = "Search craftable items...";
+        private const string SearchClearKey = "Mods.SteroidGuide.UI.SearchClear";
+        private const string SearchClearFallback = "Clear";
+
         private static readonly (FilterCategory Category, string LabelKey)[] FilterDefinitions =
         [
             (FilterCategory.All, "Mods.SteroidGuide.UI.Filters.All"),
@@ -155,8 +160,8 @@ namespace SteroidGuide.Common.UI
 
             // ── Search box ──
             _searchTextBox = new UISearchTextBox(
-                Language.GetTextValue("Mods.SteroidGuide.UI.SearchPlaceholder"),
-                Language.GetTextValue("Mods.SteroidGuide.UI.SearchClear"));
+                ResolveLocalizedText(SearchPlaceholderKey, SearchPlaceholderFallback),
+                ResolveLocalizedText(SearchClearKey, SearchClearFallback));
             _searchTextBox.Top.Set(42f, 0f);
             _searchTextBox.Left.Set(132f, 0f);
             _searchTextBox.Width.Set(650f, 0f);
@@ -489,6 +494,19 @@ namespace SteroidGuide.Common.UI
             return string.IsNullOrWhiteSpace(text)
                 ? string.Empty
                 : text.Trim().ToUpperInvariant();
+        }
+
+        private static string ResolveLocalizedText(string key, string fallback)
+        {
+            if (!Language.Exists(key))
+            {
+                return fallback;
+            }
+
+            string resolvedText = Language.GetTextValue(key);
+            return string.IsNullOrWhiteSpace(resolvedText) || string.Equals(resolvedText, key, StringComparison.Ordinal)
+                ? fallback
+                : resolvedText;
         }
 
         private static bool DictEquals(Dictionary<int, int> a, Dictionary<int, int> b)

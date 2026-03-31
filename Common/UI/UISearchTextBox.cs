@@ -93,26 +93,26 @@ namespace SteroidGuide.Common.UI
             spriteBatch.Draw(TextureAssets.MagicPixel.Value, bounds, backgroundColor);
             DrawBorder(spriteBatch, bounds, borderColor, 2);
 
-            string displayText = _text;
-            Color textColor = Color.White;
-            if (string.IsNullOrEmpty(displayText))
-            {
-                displayText = _placeholderText;
-                textColor = new Color(150, 150, 150);
-            }
-            else if (ShouldDrawCaret())
-            {
-                displayText += "|";
-            }
-
+            bool drawPlaceholder = string.IsNullOrEmpty(_text);
             float clearWidth = HasClearButton
                 ? FontAssets.MouseText.Value.MeasureString(_clearText).X * TextScale + ClearTextGap
                 : 0f;
             float maxTextWidth = Math.Max(0f, dims.Width - HorizontalPadding * 2f - clearWidth);
-            string trimmedText = TrimTextToFit(displayText, maxTextWidth);
-
             Vector2 textPosition = new(dims.X + HorizontalPadding, dims.Y + VerticalPadding);
-            Utils.DrawBorderString(spriteBatch, trimmedText, textPosition, textColor, TextScale);
+
+            if (drawPlaceholder)
+            {
+                string placeholderText = TrimTextToFit(_placeholderText, maxTextWidth);
+                Utils.DrawBorderString(spriteBatch, placeholderText, textPosition, new Color(150, 150, 150), TextScale);
+            }
+            else
+            {
+                string typedText = ShouldDrawCaret()
+                    ? $"{_text}|"
+                    : _text;
+                string trimmedText = TrimTextToFit(typedText, maxTextWidth);
+                Utils.DrawBorderString(spriteBatch, trimmedText, textPosition, Color.White, TextScale);
+            }
 
             if (HasClearButton)
             {
@@ -141,6 +141,13 @@ namespace SteroidGuide.Common.UI
             }
 
             IsFocused = true;
+            PlayerInput.WritingText = true;
+
+            if (Main.LocalPlayer != null)
+            {
+                Main.LocalPlayer.mouseInterface = true;
+            }
+
             Main.clrInput();
         }
 
@@ -211,7 +218,7 @@ namespace SteroidGuide.Common.UI
                     return candidate;
                 }
 
-                candidate = candidate[1..];
+                candidate = candidate[..^1];
             }
 
             return candidate;
