@@ -6,12 +6,16 @@ using Terraria;
 using Terraria.GameContent;
 using Terraria.GameContent.UI.Elements;
 using Terraria.ID;
+using Terraria.Localization;
+using Terraria.Map;
+using Terraria.ModLoader;
 using Terraria.UI;
 
 namespace SteroidGuide.Common.UI
 {
     public class UIRecipeTree : UIElement
     {
+        private const string StationLabelKey = "Mods.SteroidGuide.UI.RecipeTree.StationLabel";
         private const string EmptyStateText = "Click an item above to view its recipe tree.";
         private UIList _list;
         private UIScrollbar _scrollbar;
@@ -20,6 +24,7 @@ namespace SteroidGuide.Common.UI
         private RecipeGraphData _currentGraph;
         private Dictionary<int, int> _currentAvailable;
         private readonly HashSet<int> _collapsedItemIds = new();
+        private static readonly Dictionary<int, int> TileDisplayItemCache = new();
 
         private const float DepthIndent = 20f;
         private static readonly Color LineColor = Color.Gray * 0.6f;
@@ -83,11 +88,12 @@ namespace SteroidGuide.Common.UI
 
             // Tree nodes
             var emptyParentLines = new List<bool>();
-            AddChildren(root, 0, emptyParentLines);
 
             // Crafting station for root recipe
             if (root.UsedRecipe != null)
                 AddCraftingStationLine(root.UsedRecipe, 0, emptyParentLines);
+
+            AddChildren(root, 0, emptyParentLines);
 
             // Alternative recipe button for root
             if (root.AlternativeRecipes != null && root.AlternativeRecipes.Count > 0)
@@ -151,10 +157,10 @@ namespace SteroidGuide.Common.UI
                 {
                     var childParentLines = new List<bool>(parentLines) { !isLast };
 
-                    AddChildren(child, depth + 1, childParentLines);
-
                     if (child.UsedRecipe != null)
                         AddCraftingStationLine(child.UsedRecipe, depth + 1, childParentLines);
+
+                    AddChildren(child, depth + 1, childParentLines);
 
                     // Alternative Recipe button
                     if (child.AlternativeRecipes != null && child.AlternativeRecipes.Count > 0)
@@ -223,19 +229,17 @@ namespace SteroidGuide.Common.UI
 
         private void AddCraftingStationLine(Recipe recipe, int depth, List<bool> parentLines)
         {
-            var tiles = new List<string>();
-            foreach (int tileId in recipe.requiredTile)
+            List<StationDisplayInfo> stations = ResolveStations(recipe);
+            if (stations.Count > 0)
             {
-                if (tileId < 0) continue;
-
-                string tileName = GetTileName(tileId);
-                tiles.Add(tileName);
-            }
-
-            if (tiles.Count > 0)
-            {
-                string text = $"Crafting Station: {string.Join(", ", tiles)}";
-                AddTreeTextLine(text, Color.LightBlue, 0.65f, depth, parentLines);
+                var line = new UITreeStationLine(
+                    stations,
+                    ResolveLocalizedText(StationLabelKey, "Station"),
+                    depth,
+                    parentLines);
+                line.Width.Set(0f, 1f);
+                line.Height.Set(34f, 0f);
+                _list.Add(line);
             }
 
             // Show conditions if any
@@ -251,27 +255,95 @@ namespace SteroidGuide.Common.UI
             }
         }
 
+        private static List<StationDisplayInfo> ResolveStations(Recipe recipe)
+        {
+            var stations = new List<StationDisplayInfo>();
+            foreach (int tileId in recipe.requiredTile)
+            {
+                if (tileId < 0)
+                    continue;
+
+                string tileName = GetTileName(tileId);
+                int itemId = ResolveDisplayItemIdForTile(tileId);
+                stations.Add(new StationDisplayInfo(tileId, tileName, itemId));
+            }
+
+            return stations;
+        }
+
+        private static int ResolveDisplayItemIdForTile(int tileId)
+        {
+            if (TileDisplayItemCache.TryGetValue(tileId, out int cachedItemId))
+                return cachedItemId;
+
+            int resolvedItemId = ItemID.None;
+            for (int itemId = 1; itemId < ItemLoader.ItemCount; itemId++)
+            {
+                if (!UIItemRenderingHelper.TryCreateDisplayItem(itemId, out Item item))
+                    continue;
+
+                if (item.createTile == tileId)
+                {
+                    resolvedItemId = itemId;
+                    break;
+                }
+            }
+
+            TileDisplayItemCache[tileId] = resolvedItemId;
+            return resolvedItemId;
+        }
+
         private static string GetTileName(int tileId)
         {
-            // Try modded tile first
-            var modTile = Terraria.ModLoader.TileLoader.GetTile(tileId);
-            if (modTile != null)
-                return modTile.Name;
+            if (TryGetMapObjectName(tileId, out string mapObjectName))
+                return mapObjectName;
 
-            // Vanilla: use map object name
-            try
+            ModTile modTile = TileLoader.GetTile(tileId);
+            if (modTile != null)
             {
-                int lookup = Terraria.Map.MapHelper.TileToLookup(tileId, 0);
-                string name = Lang.GetMapObjectName(lookup);
-                if (!string.IsNullOrEmpty(name))
-                    return name;
-            }
-            catch
-            {
-                // Fallback
+                string localizedMapEntry = modTile.GetLocalizedValue("MapEntry");
+                string mapEntryKey = modTile.GetLocalizationKey("MapEntry");
+                if (!string.IsNullOrWhiteSpace(localizedMapEntry) &&
+                    !string.Equals(localizedMapEntry, mapEntryKey, StringComparison.Ordinal))
+                {
+                    return localizedMapEntry;
+                }
             }
 
             return $"Tile #{tileId}";
+        }
+
+        private static bool TryGetMapObjectName(int tileId, out string tileName)
+        {
+            tileName = string.Empty;
+
+            try
+            {
+                int lookup = MapHelper.TileToLookup(tileId, 0);
+                string name = Lang.GetMapObjectName(lookup);
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    tileName = name;
+                    return true;
+                }
+            }
+            catch
+            {
+                // Some tiles may not expose a map lookup entry. Leave the localized fallback to the caller.
+            }
+
+            return false;
+        }
+
+        private static string ResolveLocalizedText(string key, string fallback)
+        {
+            if (!Language.Exists(key))
+                return fallback;
+
+            string resolvedText = Language.GetTextValue(key);
+            return string.IsNullOrWhiteSpace(resolvedText) || string.Equals(resolvedText, key, StringComparison.Ordinal)
+                ? fallback
+                : resolvedText;
         }
 
         private void AddTreeTextLine(string text, Color color, float scale, int depth, List<bool> parentLines, Action onClick = null)
@@ -318,6 +390,11 @@ namespace SteroidGuide.Common.UI
 
                 Utils.DrawBorderString(spriteBatch, _text, position, _color, _scale);
             }
+        }
+
+        private readonly record struct StationDisplayInfo(int TileId, string DisplayName, int ItemId)
+        {
+            public bool HasDisplayItem => ItemId > ItemID.None;
         }
 
         private enum TriangleState
@@ -473,6 +550,231 @@ namespace SteroidGuide.Common.UI
                     new Rectangle((int)connX, (int)(centerY - LineThickness / 2f),
                         (int)(horzRight - connX), LineThickness),
                     LineColor);
+            }
+        }
+
+        private class UITreeStationLine : UIElement
+        {
+            private const float LabelScale = 0.58f;
+            private const float FallbackScale = 0.58f;
+            private const float HorizontalPadding = 4f;
+            private const float VerticalPadding = 4f;
+            private const float BadgeSize = 24f;
+            private const float BadgeSpacing = 6f;
+            private const float RowSpacing = 4f;
+            private const float LabelPaddingX = 7f;
+            private const float LabelPaddingY = 4f;
+            private const float MaxFallbackBadgeWidth = 140f;
+
+            private static readonly Color LabelBackgroundColor = new(50, 82, 112, 210);
+            private static readonly Color LabelBorderColor = new(122, 162, 198, 220);
+            private static readonly Color BadgeBackgroundColor = new(40, 56, 88, 210);
+            private static readonly Color BadgeBorderColor = new(124, 166, 214, 200);
+            private static readonly Color BadgeHoverColor = new(82, 112, 154, 220);
+            private static readonly Color FallbackTextColor = new(225, 235, 248);
+
+            private readonly string _label;
+            private readonly int _depth;
+            private readonly List<bool> _parentLines;
+            private readonly List<StationDisplayInfo> _stations;
+
+            public UITreeStationLine(List<StationDisplayInfo> stations, string label, int depth, List<bool> parentLines)
+            {
+                _stations = stations ?? new List<StationDisplayInfo>();
+                _label = label;
+                _depth = depth;
+                _parentLines = parentLines != null ? new List<bool>(parentLines) : null;
+            }
+
+            public override void Recalculate()
+            {
+                base.Recalculate();
+
+                float desiredHeight = CalculateLayoutHeight(GetDimensions().Width);
+                if (Math.Abs(Height.Pixels - desiredHeight) > 0.5f)
+                {
+                    Height.Set(desiredHeight, 0f);
+                    base.Recalculate();
+                }
+            }
+
+            protected override void DrawSelf(SpriteBatch spriteBatch)
+            {
+                var dims = GetDimensions();
+                float x = dims.X;
+                float y = dims.Y;
+
+                DrawAncestorLines(spriteBatch, x, y, dims.Height);
+
+                float contentX = x + (_depth + 1) * DepthIndent + HorizontalPadding;
+                float contentRight = dims.X + dims.Width - HorizontalPadding;
+                Vector2 labelSize = FontAssets.MouseText.Value.MeasureString(_label) * LabelScale;
+                Rectangle labelRect = new(
+                    (int)contentX,
+                    (int)(y + VerticalPadding),
+                    (int)Math.Ceiling(labelSize.X + LabelPaddingX * 2f),
+                    (int)Math.Ceiling(labelSize.Y + LabelPaddingY * 2f));
+
+                DrawFramedBox(spriteBatch, labelRect, LabelBackgroundColor, LabelBorderColor);
+                Utils.DrawBorderString(
+                    spriteBatch,
+                    _label,
+                    new Vector2(labelRect.X + LabelPaddingX, labelRect.Y + LabelPaddingY - 1f),
+                    Color.White,
+                    LabelScale);
+
+                float firstRowStartX = labelRect.Right + BadgeSpacing;
+                float currentX = firstRowStartX;
+                float currentY = y + VerticalPadding;
+                float rowStartX = contentX;
+                float rowHeight = BadgeSize;
+
+                foreach (StationDisplayInfo station in _stations)
+                {
+                    float badgeWidth = GetBadgeWidth(station);
+                    float maxRight = contentRight;
+                    if (currentX + badgeWidth > maxRight && currentX > rowStartX)
+                    {
+                        currentX = rowStartX;
+                        currentY += rowHeight + RowSpacing;
+                    }
+
+                    Rectangle badgeRect = new(
+                        (int)currentX,
+                        (int)currentY,
+                        (int)Math.Ceiling(badgeWidth),
+                        (int)BadgeSize);
+                    bool hovered = badgeRect.Contains(Main.mouseX, Main.mouseY);
+
+                    DrawStationBadge(spriteBatch, station, badgeRect, hovered);
+
+                    if (hovered)
+                        ApplyHover(station);
+
+                    currentX += badgeWidth + BadgeSpacing;
+                    rowStartX = contentX;
+                }
+            }
+
+            private float CalculateLayoutHeight(float width)
+            {
+                if (_stations.Count == 0)
+                    return BadgeSize + VerticalPadding * 2f;
+
+                float contentWidth = Math.Max(0f, width - (_depth + 1) * DepthIndent - HorizontalPadding * 2f);
+                Vector2 labelSize = FontAssets.MouseText.Value.MeasureString(_label) * LabelScale;
+                float labelWidth = labelSize.X + LabelPaddingX * 2f;
+                float availableWidth = Math.Max(BadgeSize, contentWidth);
+                float currentX = Math.Min(availableWidth, labelWidth + BadgeSpacing);
+                float rowStartX = 0f;
+                int rows = 1;
+                foreach (StationDisplayInfo station in _stations)
+                {
+                    float badgeWidth = GetBadgeWidth(station);
+                    if (currentX + badgeWidth > availableWidth && currentX > rowStartX)
+                    {
+                        rows++;
+                        currentX = rowStartX;
+                    }
+
+                    currentX += badgeWidth + BadgeSpacing;
+                    rowStartX = 0f;
+                }
+
+                return VerticalPadding * 2f + rows * BadgeSize + (rows - 1) * RowSpacing;
+            }
+
+            private static float GetBadgeWidth(StationDisplayInfo station)
+            {
+                if (station.HasDisplayItem)
+                    return BadgeSize;
+
+                Vector2 textSize = FontAssets.MouseText.Value.MeasureString(station.DisplayName) * FallbackScale;
+                return Math.Min(MaxFallbackBadgeWidth, textSize.X + 18f);
+            }
+
+            private static void DrawStationBadge(SpriteBatch spriteBatch, StationDisplayInfo station, Rectangle badgeRect, bool hovered)
+            {
+                DrawFramedBox(
+                    spriteBatch,
+                    badgeRect,
+                    hovered ? BadgeHoverColor : BadgeBackgroundColor,
+                    BadgeBorderColor);
+
+                if (station.HasDisplayItem)
+                {
+                    UIItemRenderingHelper.TryDrawItemIcon(spriteBatch, station.ItemId, badgeRect.Center.ToVector2(), 18f);
+                    return;
+                }
+
+                string text = TruncateTextToWidth(station.DisplayName, badgeRect.Width - 12f, FallbackScale);
+                Vector2 textSize = FontAssets.MouseText.Value.MeasureString(text) * FallbackScale;
+                Vector2 textPosition = new(
+                    badgeRect.X + (badgeRect.Width - textSize.X) * 0.5f,
+                    badgeRect.Y + (badgeRect.Height - textSize.Y) * 0.5f - 1f);
+                Utils.DrawBorderString(spriteBatch, text, textPosition, FallbackTextColor, FallbackScale);
+            }
+
+            private static void ApplyHover(StationDisplayInfo station)
+            {
+                if (station.HasDisplayItem &&
+                    UIItemRenderingHelper.TryCreateDisplayItem(station.ItemId, out Item hoverItem))
+                {
+                    Main.HoverItem = hoverItem.Clone();
+                }
+
+                Main.hoverItemName = station.DisplayName;
+            }
+
+            private void DrawAncestorLines(SpriteBatch spriteBatch, float x, float y, float height)
+            {
+                if (_parentLines == null)
+                    return;
+
+                var pixel = TextureAssets.MagicPixel.Value;
+                for (int d = 0; d < _parentLines.Count; d++)
+                {
+                    if (_parentLines[d])
+                    {
+                        float lineX = x + d * DepthIndent + DepthIndent / 2f;
+                        spriteBatch.Draw(
+                            pixel,
+                            new Rectangle((int)(lineX - LineThickness / 2f), (int)y, LineThickness, (int)height),
+                            LineColor);
+                    }
+                }
+            }
+
+            private static void DrawFramedBox(SpriteBatch spriteBatch, Rectangle rect, Color backgroundColor, Color borderColor)
+            {
+                Texture2D pixel = TextureAssets.MagicPixel.Value;
+                spriteBatch.Draw(pixel, rect, backgroundColor);
+
+                spriteBatch.Draw(pixel, new Rectangle(rect.X, rect.Y, rect.Width, 1), borderColor);
+                spriteBatch.Draw(pixel, new Rectangle(rect.X, rect.Bottom - 1, rect.Width, 1), borderColor);
+                spriteBatch.Draw(pixel, new Rectangle(rect.X, rect.Y, 1, rect.Height), borderColor);
+                spriteBatch.Draw(pixel, new Rectangle(rect.Right - 1, rect.Y, 1, rect.Height), borderColor);
+            }
+
+            private static string TruncateTextToWidth(string text, float maxWidth, float scale)
+            {
+                if (string.IsNullOrEmpty(text))
+                    return string.Empty;
+
+                Vector2 size = FontAssets.MouseText.Value.MeasureString(text) * scale;
+                if (size.X <= maxWidth)
+                    return text;
+
+                string truncated = text;
+                while (truncated.Length > 1)
+                {
+                    truncated = truncated[..^1];
+                    string candidate = truncated + "...";
+                    if (FontAssets.MouseText.Value.MeasureString(candidate).X * scale <= maxWidth)
+                        return candidate;
+                }
+
+                return text;
             }
         }
 

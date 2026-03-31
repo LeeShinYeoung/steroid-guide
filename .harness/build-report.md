@@ -1,22 +1,16 @@
 # Build Report
 
 ## Implemented
-- [x] Added hover-scoped mouse-wheel pagination for the craftable item grid so each wheel notch moves exactly one page through results.
-- [x] Routed wheel pagination through the existing page-change logic so grid contents, `Page X/Y` text, and pagination button enabled states stay in sync.
-- [x] Kept wheel pagination isolated to `UIItemGrid`, leaving recipe-tree scrolling and other analyzer controls unchanged.
+- [x] Fixed station fallback name resolution so modded crafting stations use localized map-entry names instead of internal mod tile identifiers.
 
 ## Files Changed
-- `Common/UI/RecipeAnalyzerUIState.cs` — hooked the item grid wheel callback into a guarded pagination entry point that validates page bounds before calling the existing `ChangePage(int delta)` method.
-- `Common/UI/UIItemGrid.cs` — added a hover-only scroll-wheel handler and callback so the grid reports wheel pagination requests without owning page state.
-- `.harness/build-report.md` — updated the report for this feature.
+- `Common/UI/UIRecipeTree.cs` — changed tile-name resolution to prefer map-entry/localized names for every station fallback badge and hover label, including modded tiles.
 
 ## How to Test
 1. Build with tModLoader using `dotnet build -p:TModLoaderTargetsPath=/Users/sy/.local/share/tModLoader/tMLMod.targets`.
-2. Open the Steroid Guide analyzer UI with enough craftable results to produce multiple pages.
-3. Hover the cursor over the craftable item grid and scroll up/down; confirm each wheel notch moves exactly one page and updates the page label plus arrow enabled state.
-4. Hover the pagination row, search box, filter sidebar, sort dropdown, recipe tree, and empty panel space; confirm wheel input does not change the current grid page there.
-5. Hover the recipe tree and scroll; confirm the tree still scrolls normally instead of paging the item grid.
-6. On the first and last page, keep scrolling past the bounds; confirm nothing desyncs and the page stays within valid limits.
+2. Open the Steroid Guide UI and select a craftable item whose active recipe requires a modded crafting station without a resolved representative icon.
+3. Verify the station fallback badge and hover text show the player-facing localized station name rather than the mod tile's internal type name.
+4. Swap to an alternative recipe and confirm the displayed station names still refresh to the currently active `UsedRecipe`.
 
 ## Known Issues
-- None.
+- None noted from build verification.
