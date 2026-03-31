@@ -13,38 +13,34 @@ using SteroidGuide.Content.Players;
 
 namespace SteroidGuide.Content.NPCs
 {
-    public class SteroidGuideProfile : ITownNPCProfile
-    {
-        public int RollVariation() => 0;
-
-        public string GetNameForVariant(NPC npc) => npc.getNewNPCName();
-
-        public Asset<Texture2D> GetTextureNPCShouldUse(NPC npc)
-        {
-            return TextureAssets.Npc[NPCID.Guide];
-        }
-
-        public int GetHeadTextureIndex(NPC npc)
-        {
-            return ModContent.GetModHeadSlot("SteroidGuide/Content/NPCs/SteroidGuideNPC_Head");
-        }
-    }
-
     [AutoloadHead]
     public class SteroidGuideNPC : ModNPC
     {
-        public override string Texture => $"Terraria/Images/NPC_{NPCID.Guide}";
+        private const int VanillaGuideType = NPCID.Guide;
 
-        public override string HeadTexture => "SteroidGuide/Content/NPCs/SteroidGuideNPC_Head";
+        private const string VanillaGuideBodyTexturePath = "Terraria/Images/TownNPCs/Guide";
 
-        public override ITownNPCProfile TownNPCProfile() => new SteroidGuideProfile();
+        private const string VanillaGuideProfileTexturePath = "Images/TownNPCs/Guide";
+
+        private const string SteroidGuideHeadTexturePath = "SteroidGuide/Content/NPCs/SteroidGuideNPC_Head";
+
+        public override string Texture => VanillaGuideBodyTexturePath;
+
+        public override string HeadTexture => SteroidGuideHeadTexturePath;
+
+        public override ITownNPCProfile TownNPCProfile() =>
+            new Profiles.LegacyNPCProfile(
+                VanillaGuideProfileTexturePath,
+                ModContent.GetModHeadSlot(SteroidGuideHeadTexturePath),
+                includeDefault: true,
+                uniquePartyTexture: false);
 
         public override void SetStaticDefaults()
         {
-            Main.npcFrameCount[Type] = 25;
-            NPCID.Sets.ExtraFramesCount[Type] = 9;
-            NPCID.Sets.AttackFrameCount[Type] = 4;
-            NPCID.Sets.HatOffsetY[Type] = 4;
+            Main.npcFrameCount[Type] = Main.npcFrameCount[VanillaGuideType];
+            NPCID.Sets.ExtraFramesCount[Type] = NPCID.Sets.ExtraFramesCount[VanillaGuideType];
+            NPCID.Sets.AttackFrameCount[Type] = NPCID.Sets.AttackFrameCount[VanillaGuideType];
+            NPCID.Sets.HatOffsetY[Type] = NPCID.Sets.HatOffsetY[VanillaGuideType];
 
             NPC.Happiness
                 .SetBiomeAffection<ForestBiome>(AffectionLevel.Like)
@@ -73,7 +69,7 @@ namespace SteroidGuide.Content.NPCs
             NPC.HitSound = SoundID.NPCHit1;
             NPC.DeathSound = SoundID.NPCDeath1;
             NPC.knockBackResist = 0.5f;
-            AnimationType = NPCID.Guide;
+            AnimationType = VanillaGuideType;
         }
 
         public override bool PreAI()

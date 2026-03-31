@@ -1,19 +1,18 @@
 # Build Report
 
 ## Implemented
-- [x] Added a localized nearby-chest status line to the recipe analyzer UI that reflects the latest on-screen chest scan snapshot.
-- [x] Preserved scan metadata in UI state so chest-count changes refresh the header even when aggregated item totals do not change.
+- [x] Stabilized the Steroid Guide body rendering by using the vanilla Guide town-NPC body texture/profile path for all draw states.
+- [x] Sourced the Steroid Guide animation frame metadata directly from `NPCID.Guide` runtime values instead of hand-maintained literals.
 
 ## Files Changed
-- `Common/UI/RecipeAnalyzerUIState.cs` — stored the latest `ScanResult`, updated scan invalidation logic, and rendered the localized chest-count header.
-- `Localization/en-US_Mods.SteroidGuide.hjson` — added English strings for singular and plural nearby-chest status text.
+- `Content/NPCs/SteroidGuideNPC.cs` — replaced the bespoke body profile with the vanilla Guide `LegacyNPCProfile`, aligned the body texture path with that profile, and copied Guide animation metadata from runtime values.
 
 ## How to Test
 1. Build with tModLoader.
-2. Open the Steroid Guide UI with no nearby synced chests and confirm the header reads `Referencing 0 nearby chests`.
-3. Move near one synced chest, then multiple synced chests, and confirm the header updates to the correct singular/plural count.
-4. Keep the UI open while moving the camera so chest visibility changes without item totals changing, and confirm the header still refreshes within the normal rescan cadence.
-5. In multiplayer, verify unopened unsynced nearby chests are not counted until the scanner actually includes them.
+2. Spawn or find the Steroid Guide in-game and watch the NPC while idle, walking, and turning.
+3. Confirm the full body always matches the vanilla Guide art without sliced or stretched animation frames.
+4. Talk to the Steroid Guide, verify the custom head icon still appears in housing/chat UI, and click `Analyze Recipes`.
+5. While the analyzer is open, confirm the NPC still freezes in place until the interaction closes.
 
 ## Known Issues
 - None observed.
