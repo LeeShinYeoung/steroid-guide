@@ -1,51 +1,41 @@
-# Spec: Direct Search Input Focus
+# Spec: Stable Pagination Arrow Graphics
 
 ## Summary
-Fix the search box so players can type into it immediately after clicking, without opening Terraria's chat first. At the same time, remove the right-side `Clear` affordance so the control behaves like a compact single-purpose filter field and leaves text entry/clearing entirely to normal keyboard input.
+Fix the broken-looking previous/next arrow graphics in the craftable item pagination row. Players should see clean, readable navigation arrows instead of distorted line art, while the existing page-change behavior, button states, and overall panel layout remain unchanged.
 
 ## Detailed Requirements
-1. Clicking anywhere inside the search box must give it active text focus on the first click. Players must not need to press `Enter`, open the chat UI, or click twice before typing.
-2. While the search box is focused, keyboard input must flow into the search query even when vanilla chat is closed. This includes normal character input, backspace-driven deletion, and IME/text-composition paths supported by Terraria's text input APIs.
-3. Search focus must belong only to the custom Steroid Guide UI. Focusing the search box must not open the chat window, toggle inventory/chat state, or require any vanilla text-entry overlay.
-4. The existing filter behavior must stay intact: each text change immediately reapplies the UI-level filter to `AnalysisResult.TopTierItems`, resets pagination to page 1, and clears the selected recipe tree if the selected item is filtered out.
-5. Pressing `ESC` while the search box is focused must release only the search focus on that first keypress. The same `ESC` keypress must not also close the Steroid Guide panel.
-6. Clicking outside the search box while it is focused must release focus cleanly without leaving text-entry state stuck on for later frames.
-7. Remove the search box's right-side `Clear` button entirely. No text label, click target, reserved width, or localization dependency for `Clear` should remain in the rendered control.
-8. After removing the clear button, typed text and placeholder text must use the full input width without shifting, clipping against phantom padding, or overlapping the caret.
-9. Reopening the UI must continue to reset the search query to empty unless the current UI flow already intentionally persists it elsewhere. This issue does not add persistence across UI sessions.
-10. The fix must remain compatibility-safe for vanilla and modded items. No item-specific exceptions, hardcoded IDs, or search-result special cases are allowed.
+1. The previous and next pagination buttons beneath the item grid must render a stable arrow glyph in-game without fragmented pixels, doubled segments, or visibly uneven line joins.
+2. Left and right arrows must use the same underlying geometry mirrored across direction. The two buttons must look visually matched rather than hand-tuned as separate shapes.
+3. The visible arrow glyph must stay centered inside the existing pagination button bounds and maintain consistent padding from the button border in normal, hover, and disabled states.
+4. The fix must preserve the current button states and interactions: hover highlighting, disabled styling on the first/last page, and left-click page changes must keep working exactly as they do now.
+5. The rendered arrow should remain readable at Terraria UI scales commonly used by players, including non-default scaled UI where subpixel rotation artifacts are more obvious.
+6. The visible arrow shape must not rely on rotated `SpriteBatch.Draw(...)` line segments for its final on-screen geometry. Use a pixel-stable shape that survives Terraria/tModLoader UI scaling cleanly.
+7. A simpler arrow style is acceptable if it is more robust. The replacement may be a stepped chevron or compact triangular arrowhead, as long as it clearly communicates previous/next navigation.
+8. The change must stay scoped to the item-grid pagination arrows unless a tiny shared helper is necessary. Do not redesign unrelated tree toggles, sort indicators, or other arrow-like controls in this task.
+9. The fix must remain compatibility-safe for vanilla and modded content. No hardcoded item IDs, screen-specific offsets, or texture asset dependencies may be introduced.
 
 ## Technical Design
-- Modify [UISearchTextBox.cs](/Users/sy/projects/steroid-guide-planner-searchbar/Common/UI/UISearchTextBox.cs) to become a true focused text-input control instead of a text box with an embedded clear action.
-- Remove `_clearText`, `HasClearButton`, `GetClearButtonRectangle()`, and all related draw/click logic from `UISearchTextBox`. The constructor should only need placeholder text plus any max-length configuration.
-- Keep focus ownership inside the custom UI control, but make the text-entry path explicit and frame-stable:
-  - use `UIElement.LeftClick(...)` to acquire focus
-  - use `UIElement.Update(...)` or a small focus-aware helper invoked from the UI update path to drive text capture every frame
-  - continue using Terraria/tModLoader text APIs already compatible with the project: `Main.GetInputText(...)`, `PlayerInput.WritingText`, `Main.clrInput()`, and `Main.LocalPlayer.mouseInterface`
-- If the current `UISearchTextBox.Update(...)` timing is why text only arrives when chat is open, move the "focused text input is active this frame" responsibility to [RecipeAnalyzerUISystem.cs](/Users/sy/projects/steroid-guide-planner-searchbar/Common/UI/RecipeAnalyzerUISystem.cs) or another single per-frame owner so the search field can request text input regardless of vanilla chat state. The important contract is that the Generator must solve the first-click typing bug by owning text focus inside the Steroid Guide UI rather than depending on vanilla chat.
-- Keep `ESC` handling split across layers:
-  - [RecipeAnalyzerUISystem.cs](/Users/sy/projects/steroid-guide-planner-searchbar/Common/UI/RecipeAnalyzerUISystem.cs) should continue intercepting `Keys.Escape` at the panel level
-  - [RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide-planner-searchbar/Common/UI/RecipeAnalyzerUIState.cs) should continue routing that first `ESC` press to the search control through `HandleEscapeKey()`
-  - `UISearchTextBox` should only report whether it consumed the escape press by unfocusing itself
-- Update [RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide-planner-searchbar/Common/UI/RecipeAnalyzerUIState.cs) to instantiate the search box without a clear-button label and to preserve the existing `OnTextChanged`, `Reset()`, and immediate `ApplyFilter()` flow.
-- Update [Localization/en-US_Mods.SteroidGuide.hjson](/Users/sy/projects/steroid-guide-planner-searchbar/Localization/en-US_Mods.SteroidGuide.hjson) to remove the now-unused `UI.SearchClear` string if it is no longer referenced anywhere.
-- No changes are expected in [RecipeAnalyzer.cs](/Users/sy/projects/steroid-guide-planner-searchbar/Common/RecipeAnalyzer.cs), [ItemScanner.cs](/Users/sy/projects/steroid-guide-planner-searchbar/Common/ItemScanner.cs), recipe graph construction, or NPC behavior.
+- Modify [UIPaginationArrowButton.cs](/Users/sy/projects/steroid-guide/Common/UI/UIPaginationArrowButton.cs) to replace the current rotated-line chevron drawing path with pixel-snapped, axis-aligned `TextureAssets.MagicPixel` rectangle draws inside `UIElement.DrawSelf(...)`.
+- Build the arrow glyph from a single shared offset definition and mirror it for `PaginationArrowDirection.Left` versus `PaginationArrowDirection.Right`. This keeps both buttons symmetric and removes duplicated geometry logic.
+- Compute the glyph from the button's integer `GetDimensions()` bounds so the final draw positions land on whole pixels. The implementation should derive an inner drawing box, center the glyph within it, and avoid border overlap even when the button size stays `30x24`.
+- Keep the existing button frame rendering in [UIPaginationArrowButton.cs](/Users/sy/projects/steroid-guide/Common/UI/UIPaginationArrowButton.cs): background fill, 1px border, and state-driven colors should remain intact unless a tiny spacing tweak is required to center the new glyph.
+- Leave pagination state management in [RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) unchanged except for minimal alignment adjustments if the new glyph needs slightly different optical centering. `ChangePage(...)`, `UpdatePageText()`, `TryChangePageFromScroll(...)`, and enable/disable behavior are not part of the bug.
+- Keep [UIItemGrid.cs](/Users/sy/projects/steroid-guide/Common/UI/UIItemGrid.cs) unchanged unless the Generator needs to verify that scroll-wheel pagination still routes through the same existing page-change flow.
+- Do not add external texture files. This should remain a code-rendered UI control compatible with the current tModLoader/XNA UI pipeline.
 
 ## UI/UX
-- The search box should behave like Recipe Browser-style direct text entry: click the field and type immediately.
-- The control should read visually as a single uninterrupted input field, not an input plus trailing action chip.
-- Clearing text is keyboard-driven only for this scope. Backspace/delete and full reset on reopen are sufficient; no replacement icon or inline button should be introduced.
-- Existing placeholder styling, panel alignment, and search-result empty state messaging should remain consistent with the current UI unless small spacing adjustments are required after removing the clear area.
+- The pagination row should keep the current compact layout: previous arrow, page label, next arrow.
+- The arrow glyph may become simpler than the current chevron if that produces a cleaner result at Terraria's pixel scale.
+- Disabled arrows should still be visible enough to communicate pagination boundaries, but clearly muted compared with active buttons.
 
 ## Success Criteria
-- [ ] Clicking the search field and typing immediately filters results without opening Terraria chat.
-- [ ] The first typed character is captured reliably even when chat was previously closed.
-- [ ] `ESC` unfocuses the search field first and does not close the full UI on the same keypress.
-- [ ] Clicking outside the field exits search focus cleanly and does not leave text-entry mode stuck on.
-- [ ] The search field renders without any right-side `Clear` text/button and uses the reclaimed width correctly.
+- [ ] In-game pagination buttons show intact left/right arrows without broken or overlapping line artifacts.
+- [ ] Left and right arrow graphics are visually symmetric and centered within their button frames.
+- [ ] Hover, disabled, click, and scroll-wheel pagination behavior remain unchanged after the visual fix.
+- [ ] No new texture assets or non-pagination UI redesigns are introduced.
 
 ## Out of Scope
-- Persisting search text across UI closes or world reloads
-- Adding advanced search syntax, tokenization, or fuzzy matching
-- Redesigning filters, sorting, pagination, or recipe-tree behavior
-- Adding a replacement icon button for clearing text
+- Redesigning the overall pagination row layout or page text styling
+- Changing how many items appear per page or how page counts are calculated
+- Updating recipe-tree triangles, sort dropdown indicators, or close-button graphics
+- Adding texture-based icons or a broader UI art pass
