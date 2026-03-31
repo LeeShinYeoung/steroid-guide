@@ -1,40 +1,43 @@
-# Spec: First-Open Analyzer UI Exception
+# Spec: Search Box Focus and Placeholder Fixes
 
 ## Summary
-Fix the client-side `Index was outside the bounds of the array` error that appears in chat the first time the player opens the Steroid Guide's `Analyze Recipes` UI. The analyzer must open cleanly on the first attempt, keep rendering valid craftable items, and remain compatible with large modded recipe sets.
+Fix the analyzer search box so players can click into it and type immediately without opening Terraria chat. The placeholder must render as a proper localized hint, disappear as soon as the user enters text, and stop visually shifting when the field transitions from empty to typed content.
 
 ## Detailed Requirements
-1. Opening the analyzer from the Steroid Guide NPC must not print an exception message to chat on the first open after entering a world, nor on later opens in the same session.
-2. The fix must cover the full first-open path triggered by `SteroidGuideNPC.OnChatButtonClicked(...)`, `RecipeAnalyzerUISystem.ShowUI(...)`, `RecipeAnalyzerUIState.OnShow()`, and the first UI draw/update cycle.
-3. UI rendering must tolerate any craftable item ID returned by the existing recipe analysis, including modded items, without assuming that every item-backed asset array can be indexed blindly during the first frame.
-4. If an item icon or animation frame cannot be resolved safely for a frame, the analyzer must fail soft by keeping the row interactive and text-visible instead of throwing or surfacing a chat error.
-5. The protection must apply anywhere the analyzer renders item visuals from analysis data, including the top-tier item grid and recipe tree rows.
-6. Search, sorting, pagination, selection, recipe-tree expansion, and alternative recipe switching must continue to behave as they do today once the exception is removed.
-7. The fix must not hardcode vanilla or mod item IDs, and it must not special-case specific content mods.
-8. The analyzer's craftability results and recipe graph logic are not to be changed unless a minimal guard is required to keep invalid visual state out of the UI layer.
+1. Clicking the analyzer search box must place it into an active text-entry state immediately, without requiring `Enter`, chat open state, or any other vanilla text UI to be opened first.
+2. While the search box is focused, keyboard input must continue flowing into the box through the analyzer UI update loop, and world interactions behind the panel must remain blocked as they are today.
+3. Clicking outside the search box must remove search focus without closing the analyzer UI.
+4. Pressing `Esc` while the search box is focused must only clear search focus on that keypress; the analyzer UI close behavior should remain on the next `Esc`, matching the current `RecipeAnalyzerUISystem` flow.
+5. The placeholder text must display as a resolved user-facing localized string, never the raw key `Mods.SteroidGuide.UI.SearchPlaceholder`.
+6. If localization lookup fails for any reason, the UI must fall back to a short built-in English hint rather than exposing a raw localization key.
+7. The placeholder must render only when the effective query is empty. Once any query text is present, only the typed value and optional caret/clear affordance may be drawn.
+8. The text layout must stay left-aligned and visually stable when moving between placeholder and typed text. Typing into the box must not make the placeholder appear to slide, jump to the right, or overlap the entered query.
+9. Existing search result behavior must stay intact: filtering still targets top-tier craftable items only, remains case-insensitive, resets pagination to page 1 on query change, and clears the selected recipe tree if the selected item falls out of the filtered result set.
+10. The fix must remain content-mod compatible and must not hardcode item IDs, chat state assumptions, or mod-specific logic.
 
 ## Technical Design
-- Inspect and adjust the first-open flow in [Common/UI/RecipeAnalyzerUISystem.cs](/Users/sy/projects/steroid-guide-pge10/Common/UI/RecipeAnalyzerUISystem.cs), [Common/UI/RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide-pge10/Common/UI/RecipeAnalyzerUIState.cs), [Common/UI/UIItemGrid.cs](/Users/sy/projects/steroid-guide-pge10/Common/UI/UIItemGrid.cs), and [Common/UI/UIRecipeTree.cs](/Users/sy/projects/steroid-guide-pge10/Common/UI/UIRecipeTree.cs).
-- Add a small shared helper in `Common/UI/` if needed so item-icon rendering uses one guarded code path instead of duplicating fragile array access in both the grid and the tree.
-- Keep `RecipeAnalyzer`, `RecipeGraphSystem`, and `ItemScanner` as the source of recipe data unless investigation proves the first-open exception comes from handing the UI an invalid item ID. The default assumption should be that the bug is in UI initialization or rendering, not in craftability analysis.
-- For item visuals, continue to use the normal tModLoader/Terraria rendering path (`Main.instance.LoadItem(...)`, `TextureAssets.Item`, `Main.itemAnimations`, `Item.SetDefaults(...)`), but add explicit bounds/readiness checks before indexing array-backed assets.
-- If the first-open issue is caused by initialization order rather than a bad item ID, defer the unsafe step until the UI state is attached and ready instead of allowing a first-frame exception. Any deferral must stay internal to the analyzer UI and must not require extra player input.
-- Preserve existing `AnalysisResult` contents, existing filter/search/sort logic, and the current analyzer layout. This task is about resilient UI presentation, not a redesign.
-- Keep behavior compatible with large mod packs by deriving all decisions from runtime item metadata and current array lengths or loader counts, never from hardcoded IDs.
+- Modify `Common/UI/UISearchTextBox.cs` to make mouse focus the authoritative trigger for text-entry mode and keep all placeholder/caret/clear-button drawing decisions inside that control.
+- Update `Common/UI/RecipeAnalyzerUIState.cs` to keep using the search box as the single source of truth for query changes, but resolve placeholder text defensively so the UI never surfaces a raw localization key.
+- Keep `Common/UI/RecipeAnalyzerUISystem.cs` responsible for the analyzer-wide `Esc` close flow; the search box should consume the first `Esc` through `HandleEscape()` and let the system close the panel only after focus has already been released.
+- Update `Localization/en-US_Mods.SteroidGuide.hjson` only if the existing copy needs a clearer player-facing hint or if a missing/fallback-safe string needs to be added.
+- Continue using Terraria/tModLoader text-input APIs already present in the mod: `UIElement.LeftClick`, `UIElement.Update`, `UIElement.ContainsPoint`, `Main.GetInputText(...)`, `PlayerInput.WritingText`, `Main.clrInput()`, and `Main.LocalPlayer.mouseInterface`.
+- Separate placeholder rendering from typed-text rendering in the search box draw path so trimming logic applies to the active query, not to placeholder state. If width trimming is needed, it should preserve a stable left-aligned anchor and never draw placeholder text once `_text` is non-empty.
+- Do not change `RecipeAnalyzer`, `RecipeGraphSystem`, or the search filtering algorithm unless a minimal interface contract change is required between the text box and `RecipeAnalyzerUIState`.
 
 ## UI/UX
-- No layout or wording changes are required.
-- The analyzer should look the same to the player except that the first-open error disappears.
-- If a specific item icon cannot be drawn safely in a given frame, the slot or tree row should still show its text and remain usable rather than collapsing the whole UI interaction.
+- The search field keeps its current placement and general styling.
+- Empty state: a localized hint such as "Search craftable items..." appears in a subdued color.
+- Focused state: the field clearly accepts typing immediately after click, with the existing caret/clear affordances preserved or cleaned up as needed.
+- Filled state: only the entered query is visible; the placeholder is fully hidden and does not animate or drift.
 
 ## Success Criteria
-- [ ] Opening `Analyze Recipes` from the Steroid Guide in a fresh world session no longer prints `Index was outside the bounds of the array` to chat.
-- [ ] The same fix works when the craftable results include modded items from other content mods.
-- [ ] The top-tier item grid and recipe tree can both render after the first open without client-side exceptions.
-- [ ] Search, sort, pagination, selection, and recipe-tree interactions still work after the fix.
-- [ ] No item-ID hardcoding or mod-specific compatibility shims are introduced.
+- [ ] In game, clicking the search box and typing filters results immediately without opening chat via `Enter`.
+- [ ] The placeholder renders as a readable hint string instead of `Mods.SteroidGuide.UI.SearchPlaceholder`.
+- [ ] After typing at least one character, the placeholder is no longer visible and no right-shift/jumping artifact appears in the field.
+- [ ] Clicking outside the field removes focus, and pressing `Esc` while focused only unfocuses the field on the first keypress.
+- [ ] Existing search filtering, pagination reset, and recipe-tree deselection behavior still work after the fix.
 
 ## Out of Scope
-- Changing category definitions, search UX, pagination visuals, or recipe-tree styling.
-- Rewriting the recursive recipe analyzer or top-tier filtering rules.
-- Adding telemetry, config toggles, or a separate user-facing error UI for analyzer failures.
+- Reworking the analyzer layout, category filters, sorting UI, or recipe tree presentation.
+- Changing which items are considered craftable or searchable.
+- Adding multi-field search, fuzzy matching, or localization files beyond what is required for the existing search hint.
