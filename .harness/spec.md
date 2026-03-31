@@ -1,40 +1,38 @@
-# Spec: Show Nearby Chest Reference Count
+# Spec: Stabilize Steroid Guide NPC Animation Texture
 
 ## Summary
-Show a clear status line in the recipe analyzer UI telling the player how many nearby chests are currently included in the scan. This makes the result set easier to trust, especially when the player is standing near multiple storage containers or when camera movement changes which chests are considered.
+Fix the Steroid Guide NPC so the body sprite stays visually correct while moving, animating, and opening dialogue. Players should see the same clean vanilla Guide body art in motion that they already see when the NPC is idle, without losing Steroid Guide's custom head icon, dialogue, or analyzer interaction.
 
 ## Detailed Requirements
-1. Opening the recipe analyzer UI must show a visible header/status line that reports the number of nearby chests included in the current scan snapshot.
-2. The displayed count must come from the existing on-screen chest scan logic, not from a separate proximity heuristic. It should represent the synced chests that the mod actually inspected for crafting analysis.
-3. The count must include empty nearby chests if they were part of the current scan, because they were still considered by the scanner even if they contributed no items.
-4. In multiplayer, chests skipped as unsynced must not be counted until their contents are available and the scanner actually includes them.
-5. The header text must refresh whenever the latest scan changes in a way that affects the displayed chest count, even if the aggregated item dictionary is unchanged.
-6. The status line must stay visible and readable at the existing 820x600 layout without overlapping the close button, search box, or other controls.
-7. The text must be localization-backed with a readable English fallback and must not expose raw localization keys.
-8. The change must remain fully data-driven and mod-compatible. No hardcoded chest ids, tile ids, or world-specific assumptions are allowed.
+1. The Steroid Guide's body sprite must render without corruption in normal town-NPC animation states, including idle, walking, turning, and other Guide-style framed movement handled by vanilla animation logic.
+2. The fix must preserve the current Steroid Guide behavior set: passive town NPC stats, custom names, custom dialogue, happiness, world-spawn behavior, and the `Analyze Recipes` chat button.
+3. The NPC must continue using the mod's custom head icon for map/chat housing UI while the full body continues to visually match the vanilla Guide.
+4. The animated body rendering path must be driven from vanilla Guide data rather than duplicated magic numbers. Frame-count and related animation metadata must come from `NPCID.Guide` runtime values or an equivalent vanilla-backed source.
+5. The implementation must use one consistent body-texture/profile strategy for every animated draw state. It must not rely on a partially copied setup where idle uses a valid Guide texture path but animated frames resolve against mismatched metadata or a conflicting texture source.
+6. The fix must not introduce hardcoded frame rectangles, manual per-frame offsets, or mod-specific item/NPC assumptions that would make future tModLoader updates brittle.
+7. No recipe-analysis, UI, chest scanning, or dialogue-selection logic should change as part of this work unless a small refactor is strictly necessary to keep the NPC rendering path clean.
 
 ## Technical Design
-- Modify [Common/UI/RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) to preserve the latest scan metadata, not just the scanned item totals. The UI state should keep enough state to render both the item analysis and the current nearby-chest count from the same snapshot.
-- Update the UI state flow so `OnShow()`, the 30-frame rescan path in `Update(...)`, and the analysis refresh path all consume a shared scan result object or equivalent paired state (`items` + `chestCount`) instead of dropping `ChestCount` after `ItemScanner.ScanAvailableItems(...)`.
-- Add a dedicated header/status text element in [Common/UI/RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) near the top row of the main panel. It should be updated from the current scan snapshot before or alongside the item grid refresh.
-- Change the rescan invalidation logic in [Common/UI/RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) so the UI refreshes when either the scanned item dictionary changes or the nearby-chest count changes. This prevents stale copy when chest visibility changes without changing aggregate item totals.
-- Reuse the existing [Common/ItemScanner.cs](/Users/sy/projects/steroid-guide/Common/ItemScanner.cs) `ScanResult.ChestCount` as the source of truth. No new chest search algorithm is needed; only the contract between scanner and UI must be carried through consistently.
-- Add localization entries in [Localization/en-US_Mods.SteroidGuide.hjson](/Users/sy/projects/steroid-guide/Localization/en-US_Mods.SteroidGuide.hjson) for the chest-count status text. If singular/plural variants are used, both forms must be defined there and resolved in UI code without raw-key leakage.
-- No changes are required to [Common/RecipeAnalyzer.cs](/Users/sy/projects/steroid-guide/Common/RecipeAnalyzer.cs), [Common/RecipeGraphSystem.cs](/Users/sy/projects/steroid-guide/Common/RecipeGraphSystem.cs), NPC dialogue hooks, or worldgen behavior.
+- Modify [Content/NPCs/SteroidGuideNPC.cs](/Users/sy/projects/steroid-guide/Content/NPCs/SteroidGuideNPC.cs) as the primary implementation surface. This file currently mixes `ModNPC.Texture`, `ITownNPCProfile.GetTextureNPCShouldUse`, explicit town-NPC frame metadata, and `AnimationType = NPCID.Guide`.
+- In `SetStaticDefaults()`, stop treating Guide animation metadata as hand-maintained literals. Source `Main.npcFrameCount[Type]`, `NPCID.Sets.ExtraFramesCount[Type]`, `NPCID.Sets.AttackFrameCount[Type]`, and `NPCID.Sets.HatOffsetY[Type]` directly from the corresponding `NPCID.Guide` values so Steroid Guide stays aligned with the vanilla Guide spritesheet layout.
+- Review `Texture`, `TownNPCProfile()`, and `SteroidGuideProfile.GetTextureNPCShouldUse(...)` as one rendering contract. The final implementation should designate a single authoritative Guide body texture source for the NPC's full-body draw path and ensure animated frames resolve against that same source.
+- Keep the mod head registration path intact through `HeadTexture`, `[AutoloadHead]`, and `ModContent.GetModHeadSlot(...)`. The fix is for body animation corruption, not for replacing the custom housing/chat head asset.
+- Continue using vanilla Guide animation framing through `AnimationType = NPCID.Guide` rather than introducing custom `FindFrame(...)` logic unless testing proves a manual override is the only stable fix.
+- If a town-profile helper or equivalent vanilla-backed profile object is available in tModLoader, prefer that over bespoke profile plumbing, as long as it still allows Steroid Guide to keep its own head slot.
+- No new custom body PNG should be introduced unless the Generator can demonstrate that tModLoader cannot keep the vanilla Guide body stable through the existing texture/profile APIs. The default plan is to reuse vanilla assets, not copy them into the mod.
+- Verify that the existing `PreAI()` freeze behavior while the analyzer UI is open still works after the rendering changes, since the issue scope is visual and must not regress NPC interaction flow.
 
 ## UI/UX
-- Place the chest-count line in the panel header area so the player sees it immediately when the analyzer opens.
-- Use concise wording such as `Referencing 0 nearby chests` / `Referencing 1 nearby chest` / `Referencing 3 nearby chests`, driven by localization.
-- The text should feel like live analysis context, not decorative copy. It should update quietly when the scan refreshes and should not steal focus from search or pagination controls.
+- The visual result should be simple: the Steroid Guide should look like the vanilla Guide body at all times instead of briefly becoming garbled during motion.
+- The housing/map/chat head icon should remain the Steroid Guide head asset already shipped in the mod.
 
 ## Success Criteria
-- [ ] Opening the analyzer with no on-screen chests shows a localized header indicating `0` nearby chests are being referenced.
-- [ ] Opening or keeping the analyzer open while two synced on-screen chests are in range shows `2` nearby chests in the header.
-- [ ] If chest visibility changes and the nearby-chest count changes without changing aggregate scanned item totals, the header still updates to the new count within the existing rescan cadence.
-- [ ] In multiplayer, unsynced nearby chests are not counted until a later scan actually includes them.
+- [ ] A spawned Steroid Guide renders correctly while idle and while walking across the world, with no sliced, stretched, or otherwise corrupted body frames.
+- [ ] Facing-direction changes and other normal Guide-style animation transitions do not introduce texture corruption.
+- [ ] Talking to the NPC and opening the analyzer still works exactly as before, and the NPC head icon remains the custom `SteroidGuideNPC_Head` asset.
+- [ ] The implementation does not add a hardcoded custom body spritesheet unless a vanilla-texture approach is proven impossible during build work.
 
 ## Out of Scope
-- Changing which storage sources are scanned beyond the current inventory plus on-screen chest rules
-- Redesigning the item grid, recipe tree, filters, search, or pagination
-- Adding tooltips, warnings, or per-chest breakdowns
-- Optimizing the scanner beyond the UI-state changes needed to keep the chest count accurate
+- Creating a brand-new custom full-body sprite for Steroid Guide
+- Changing NPC stats, spawn rules, dialogue writing, analyzer UI, or recipe-analysis logic
+- Adding shimmer-, party-, or biome-specific visual variants beyond what is needed to stop the current animation corruption
