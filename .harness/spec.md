@@ -1,45 +1,40 @@
-# Spec: Fix Craftable Item Eligibility and Recipe Tree Consistency
+# Spec: Show Nearby Chest Reference Count
 
 ## Summary
-Ensure the craftable item list only contains items the player can produce through an actual recipe chain from the currently scanned inventory and nearby chests. Fix the recipe tree so selecting a listed item always shows its crafting path even when the player already owns one or more copies of that result item.
+Show a clear status line in the recipe analyzer UI telling the player how many nearby chests are currently included in the scan. This makes the result set easier to trust, especially when the player is standing near multiple storage containers or when camera movement changes which chests are considered.
 
 ## Detailed Requirements
-1. Top-tier item analysis must treat the selected result item as something to craft, not something already satisfied by direct ownership. Existing copies of the root result item must not make that item eligible for `AllCraftable` or `TopTierItems`.
-2. Intermediate ingredients must continue to use currently owned stacks exactly as they do today. The ownership exclusion applies only to the root result item being evaluated for list inclusion or tree expansion.
-3. Items that are merely owned, but cannot currently be produced through any valid recipe chain, must be excluded from the craftable item list even if they have recipes registered in `Main.recipe[]`.
-4. Items that are both already owned and still craftable from the current materials must remain in the craftable item list.
-5. Selecting an item from the craftable item list must build a non-empty recipe tree whenever a valid crafting path exists. The root item being owned must not cause the tree to collapse to a single node.
-6. The recipe tree must use the same craftability rule as list analysis so the selected item’s status, children, and alternative recipe behavior stay consistent with the analyzer result.
-7. The fallback tree shown for missing paths must continue to surface missing ingredients and recipe conditions for debugging the path, but it must not rely on root-item ownership to mark a result as craftable.
-8. The fix must remain data-driven and mod-compatible. No hardcoded item IDs, recipe IDs, or mod-specific exceptions are allowed.
+1. Opening the recipe analyzer UI must show a visible header/status line that reports the number of nearby chests included in the current scan snapshot.
+2. The displayed count must come from the existing on-screen chest scan logic, not from a separate proximity heuristic. It should represent the synced chests that the mod actually inspected for crafting analysis.
+3. The count must include empty nearby chests if they were part of the current scan, because they were still considered by the scanner even if they contributed no items.
+4. In multiplayer, chests skipped as unsynced must not be counted until their contents are available and the scanner actually includes them.
+5. The header text must refresh whenever the latest scan changes in a way that affects the displayed chest count, even if the aggregated item dictionary is unchanged.
+6. The status line must stay visible and readable at the existing 820x600 layout without overlapping the close button, search box, or other controls.
+7. The text must be localization-backed with a readable English fallback and must not expose raw localization keys.
+8. The change must remain fully data-driven and mod-compatible. No hardcoded chest ids, tile ids, or world-specific assumptions are allowed.
 
 ## Technical Design
-- Modify [Common/RecipeAnalyzer.cs](/Users/sy/projects/steroid-guide/Common/RecipeAnalyzer.cs) to separate two concepts that are currently conflated:
-  - satisfying a requirement from owned stacks
-  - producing a new copy of the target item through a recipe
-- Introduce an internal evaluation path for root-item analysis that ignores owned copies of the root result item while still allowing owned intermediate ingredients to satisfy recursive requirements. The implementation can be a dedicated top-level method or a structured evaluation result passed into `CanCraft(...)`, but it must make the root/child distinction explicit.
-- Keep `AnalysisResult.AllCraftable` and `AnalysisResult.TopTierItems` semantics aligned with the mod spec: membership means “craftable via recipe now,” not “owned or craftable.”
-- Update the top-tier filter in [Common/RecipeAnalyzer.cs](/Users/sy/projects/steroid-guide/Common/RecipeAnalyzer.cs) to continue using the recipe-produced craftable set after the eligibility fix; no change to `RecipeGraphSystem.ItemUsedInResults` is required.
-- Update [Common/UI/RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) so `OnItemSelected(...)` requests a recipe tree using the same root-item rule as the analyzer. The selected root item may still display its owned count for context, but tree expansion must be based on recipe viability, not the early owned short-circuit.
-- Update [Common/RecipeAnalyzer.cs](/Users/sy/projects/steroid-guide/Common/RecipeAnalyzer.cs) `BuildRecipeTree(...)` so the root node can show recipe children and `UsedRecipe` even when `OwnedCount >= RequiredCount`, while child nodes continue to return `Owned` when direct ownership satisfies the requirement.
-- Ensure recipe swapping in [Common/UI/UIRecipeTree.cs](/Users/sy/projects/steroid-guide/Common/UI/UIRecipeTree.cs) rebuilds children with the same root-evaluation rule so swapping does not reintroduce the empty-tree behavior.
-- No changes are required to [Common/RecipeGraphSystem.cs](/Users/sy/projects/steroid-guide/Common/RecipeGraphSystem.cs) DAG construction, [Common/ItemScanner.cs](/Users/sy/projects/steroid-guide/Common/ItemScanner.cs) chest scanning, or any tModLoader hook usage beyond the existing `ModSystem.PostAddRecipes()`, UI `OnShow()`, and UI selection/update flow.
+- Modify [Common/UI/RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) to preserve the latest scan metadata, not just the scanned item totals. The UI state should keep enough state to render both the item analysis and the current nearby-chest count from the same snapshot.
+- Update the UI state flow so `OnShow()`, the 30-frame rescan path in `Update(...)`, and the analysis refresh path all consume a shared scan result object or equivalent paired state (`items` + `chestCount`) instead of dropping `ChestCount` after `ItemScanner.ScanAvailableItems(...)`.
+- Add a dedicated header/status text element in [Common/UI/RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) near the top row of the main panel. It should be updated from the current scan snapshot before or alongside the item grid refresh.
+- Change the rescan invalidation logic in [Common/UI/RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) so the UI refreshes when either the scanned item dictionary changes or the nearby-chest count changes. This prevents stale copy when chest visibility changes without changing aggregate item totals.
+- Reuse the existing [Common/ItemScanner.cs](/Users/sy/projects/steroid-guide/Common/ItemScanner.cs) `ScanResult.ChestCount` as the source of truth. No new chest search algorithm is needed; only the contract between scanner and UI must be carried through consistently.
+- Add localization entries in [Localization/en-US_Mods.SteroidGuide.hjson](/Users/sy/projects/steroid-guide/Localization/en-US_Mods.SteroidGuide.hjson) for the chest-count status text. If singular/plural variants are used, both forms must be defined there and resolved in UI code without raw-key leakage.
+- No changes are required to [Common/RecipeAnalyzer.cs](/Users/sy/projects/steroid-guide/Common/RecipeAnalyzer.cs), [Common/RecipeGraphSystem.cs](/Users/sy/projects/steroid-guide/Common/RecipeGraphSystem.cs), NPC dialogue hooks, or worldgen behavior.
 
 ## UI/UX
-- No layout redesign is required.
-- The existing item list, pagination, and recipe-tree presentation remain unchanged.
-- The user-facing behavioral change is:
-  - items already owned but not currently craftable disappear from the craftable list
-  - items already owned and still craftable remain selectable and show their recipe tree normally
+- Place the chest-count line in the panel header area so the player sees it immediately when the analyzer opens.
+- Use concise wording such as `Referencing 0 nearby chests` / `Referencing 1 nearby chest` / `Referencing 3 nearby chests`, driven by localization.
+- The text should feel like live analysis context, not decorative copy. It should update quietly when the scan refreshes and should not steal focus from search or pagination controls.
 
 ## Success Criteria
-- [ ] With wood in inventory and iron bars in a nearby scanned chest, `Chest` appears in the craftable list only if it is actually craftable through its recipe, and selecting it shows the expected recipe tree instead of a single root node.
-- [ ] Owning a final weapon or tool without the remaining ingredients to craft another copy does not cause that item to appear in `TopTierItems`.
-- [ ] Owning one or more copies of a result item does not prevent the UI from showing its crafting station row and ingredient children when a valid recipe path still exists.
-- [ ] Alternative recipe swapping preserves correct `Craftable` vs `Missing` child statuses under the new root-item rule.
+- [ ] Opening the analyzer with no on-screen chests shows a localized header indicating `0` nearby chests are being referenced.
+- [ ] Opening or keeping the analyzer open while two synced on-screen chests are in range shows `2` nearby chests in the header.
+- [ ] If chest visibility changes and the nearby-chest count changes without changing aggregate scanned item totals, the header still updates to the new count within the existing rescan cadence.
+- [ ] In multiplayer, unsynced nearby chests are not counted until a later scan actually includes them.
 
 ## Out of Scope
-- Expanding the scanned storage sources beyond current inventory and on-screen chests
-- Reworking category filters, sorting, search, or pagination behavior
-- Adding new UI chrome, badges, or redesigning the recipe tree visuals
-- Performance optimizations beyond the refactor needed to make root craftability explicit
+- Changing which storage sources are scanned beyond the current inventory plus on-screen chest rules
+- Redesigning the item grid, recipe tree, filters, search, or pagination
+- Adding tooltips, warnings, or per-chest breakdowns
+- Optimizing the scanner beyond the UI-state changes needed to keep the chest count accurate
