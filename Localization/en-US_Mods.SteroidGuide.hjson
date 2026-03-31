@@ -20,6 +20,8 @@ NPCs: {
 }
 
 UI: {
+	NearbyChestStatusSingular: Referencing {0} nearby chest
+	NearbyChestStatusPlural: Referencing {0} nearby chests
 	SearchPlaceholder: Search craftable items...
 	SearchClear: Clear
 	SearchNoResults: No craftable items match the current query.

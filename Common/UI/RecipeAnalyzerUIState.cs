@@ -21,6 +21,10 @@ namespace SteroidGuide.Common.UI
 
     public class RecipeAnalyzerUIState : UIState
     {
+        private const string NearbyChestStatusSingularKey = "Mods.SteroidGuide.UI.NearbyChestStatusSingular";
+        private const string NearbyChestStatusSingularFallback = "Referencing {0} nearby chest";
+        private const string NearbyChestStatusPluralKey = "Mods.SteroidGuide.UI.NearbyChestStatusPlural";
+        private const string NearbyChestStatusPluralFallback = "Referencing {0} nearby chests";
         private const string SearchPlaceholderKey = "Mods.SteroidGuide.UI.SearchPlaceholder";
         private const string SearchPlaceholderFallback = "Search craftable items...";
         private const string SearchClearKey = "Mods.SteroidGuide.UI.SearchClear";
@@ -40,6 +44,7 @@ namespace SteroidGuide.Common.UI
         ];
 
         private UIPanel _mainPanel;
+        private UIText _nearbyChestStatusText;
 
         // Filter
         private FilterCategory _currentFilter = FilterCategory.All;
@@ -68,7 +73,7 @@ namespace SteroidGuide.Common.UI
 
         // State
         private AnalysisResult _analysisResult;
-        private Dictionary<int, int> _lastScannedItems;
+        private ScanResult? _latestScanResult;
         private readonly Dictionary<int, string> _normalizedItemNames = new();
         private List<int> _filteredItems = new();
         private int _currentPage;
@@ -110,6 +115,11 @@ namespace SteroidGuide.Common.UI
                 ModContent.GetInstance<RecipeAnalyzerUISystem>()?.HideUI();
             };
             _mainPanel.Append(closeButton);
+
+            _nearbyChestStatusText = new UIText(ResolveNearbyChestStatusText(0), 0.8f);
+            _nearbyChestStatusText.Top.Set(10f, 0f);
+            _nearbyChestStatusText.Left.Set(8f, 0f);
+            _mainPanel.Append(_nearbyChestStatusText);
 
             // ── Filter sidebar ──
             var filterPanel = new UIPanel();
@@ -231,7 +241,8 @@ namespace SteroidGuide.Common.UI
 
         public void OnShow()
         {
-            _lastScannedItems = null;
+            _latestScanResult = null;
+            _analysisResult = null;
             _selectedItemId = -1;
             _currentPage = 0;
             _currentFilter = FilterCategory.All;
@@ -241,6 +252,7 @@ namespace SteroidGuide.Common.UI
             _searchTextBox?.Reset();
             _recipeTree?.ClearTree();
             UpdateFilterSelectionStates();
+            UpdateNearbyChestStatusText(0);
             RunAnalysis();
         }
 
@@ -253,10 +265,9 @@ namespace SteroidGuide.Common.UI
             if (_updateCounter % 30 == 0 && Main.LocalPlayer != null)
             {
                 var scanResult = ItemScanner.ScanAvailableItems(Main.LocalPlayer);
-                if (!DictEquals(_lastScannedItems, scanResult.Items))
+                if (HasScanChanged(scanResult))
                 {
-                    _lastScannedItems = scanResult.Items;
-                    RunAnalysisFromScan();
+                    ApplyScanResult(scanResult);
                 }
             }
 
@@ -270,17 +281,28 @@ namespace SteroidGuide.Common.UI
         private void RunAnalysis()
         {
             if (Main.LocalPlayer == null) return;
-            var initialScan = ItemScanner.ScanAvailableItems(Main.LocalPlayer);
-            _lastScannedItems = initialScan.Items;
-            RunAnalysisFromScan();
+            ApplyScanResult(ItemScanner.ScanAvailableItems(Main.LocalPlayer), forceAnalysis: true);
         }
 
-        private void RunAnalysisFromScan()
+        private void ApplyScanResult(ScanResult scanResult, bool forceAnalysis = false)
         {
-            var graph = RecipeGraphSystem.Graph;
-            if (graph == null || _lastScannedItems == null) return;
+            bool itemsChanged = forceAnalysis ||
+                _analysisResult == null ||
+                !_latestScanResult.HasValue ||
+                !DictEquals(_latestScanResult.Value.Items, scanResult.Items);
 
-            _analysisResult = RecipeAnalyzer.Analyze(graph, _lastScannedItems);
+            _latestScanResult = scanResult;
+            UpdateNearbyChestStatusText(scanResult.ChestCount);
+
+            if (!itemsChanged)
+            {
+                return;
+            }
+
+            var graph = RecipeGraphSystem.Graph;
+            if (graph == null || scanResult.Items == null) return;
+
+            _analysisResult = RecipeAnalyzer.Analyze(graph, scanResult.Items);
             RebuildItemNameCache();
             ApplyFilter();
         }
@@ -476,15 +498,15 @@ namespace SteroidGuide.Common.UI
             _selectedItemId = itemId;
             UpdateGrid();
 
-            if (_lastScannedItems != null && RecipeGraphSystem.Graph != null)
+            if (_latestScanResult.HasValue && _latestScanResult.Value.Items != null && RecipeGraphSystem.Graph != null)
             {
                 var tree = RecipeAnalyzer.BuildRecipeTree(
                     itemId,
                     1,
                     RecipeGraphSystem.Graph,
-                    _lastScannedItems,
+                    _latestScanResult.Value.Items,
                     ignoreOwnedForCurrentNode: true);
-                _recipeTree?.SetTree(tree, RecipeGraphSystem.Graph, _lastScannedItems);
+                _recipeTree?.SetTree(tree, RecipeGraphSystem.Graph, _latestScanResult.Value.Items);
             }
         }
 
@@ -522,17 +544,39 @@ namespace SteroidGuide.Common.UI
                 : text.Trim().ToUpperInvariant();
         }
 
+        private void UpdateNearbyChestStatusText(int chestCount)
+        {
+            _nearbyChestStatusText?.SetText(ResolveNearbyChestStatusText(chestCount));
+        }
+
+        private static string ResolveNearbyChestStatusText(int chestCount)
+        {
+            string key = chestCount == 1 ? NearbyChestStatusSingularKey : NearbyChestStatusPluralKey;
+            string fallback = chestCount == 1 ? NearbyChestStatusSingularFallback : NearbyChestStatusPluralFallback;
+            return ResolveLocalizedText(key, fallback, chestCount);
+        }
+
         private static string ResolveLocalizedText(string key, string fallback)
+        {
+            return ResolveLocalizedText(key, fallback, Array.Empty<object>());
+        }
+
+        private static string ResolveLocalizedText(string key, string fallback, params object[] args)
         {
             if (!Language.Exists(key))
             {
-                return fallback;
+                return FormatLocalizedText(fallback, args);
             }
 
-            string resolvedText = Language.GetTextValue(key);
+            string resolvedText = Language.GetTextValue(key, args);
             return string.IsNullOrWhiteSpace(resolvedText) || string.Equals(resolvedText, key, StringComparison.Ordinal)
-                ? fallback
+                ? FormatLocalizedText(fallback, args)
                 : resolvedText;
+        }
+
+        private static string FormatLocalizedText(string text, params object[] args)
+        {
+            return args == null || args.Length == 0 ? text : string.Format(text, args);
         }
 
         private void SetSortDropdownOpen(bool open)
@@ -561,6 +605,14 @@ namespace SteroidGuide.Common.UI
         private static string GetSortLabel(SortCriteria sort)
         {
             return sort == SortCriteria.RecipeDepth ? "Recipe Depth" : sort.ToString();
+        }
+
+        private bool HasScanChanged(ScanResult scanResult)
+        {
+            return _analysisResult == null ||
+                !_latestScanResult.HasValue ||
+                _latestScanResult.Value.ChestCount != scanResult.ChestCount ||
+                !DictEquals(_latestScanResult.Value.Items, scanResult.Items);
         }
 
         private static bool DictEquals(Dictionary<int, int> a, Dictionary<int, int> b)
