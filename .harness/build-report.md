@@ -1,20 +1,19 @@
 # Build Report
 
 ## Implemented
-- [x] Root craftability now ignores owned copies of the selected/result item while still consuming owned intermediate ingredients.
-- [x] Craftable/top-tier list membership now means "craftable via recipe now" rather than "owned or craftable."
-- [x] Selecting a listed item now builds its recipe tree with the same root-item rule, including alternative recipe swaps.
+- [x] Added a localized nearby-chest status line to the recipe analyzer UI that reflects the latest on-screen chest scan snapshot.
+- [x] Preserved scan metadata in UI state so chest-count changes refresh the header even when aggregated item totals do not change.
 
 ## Files Changed
-- `Common/RecipeAnalyzer.cs` — separated root-item recipe evaluation from owned-stack satisfaction and carried the rule into tree construction metadata.
-- `Common/UI/RecipeAnalyzerUIState.cs` — requests the selected item's recipe tree with root ownership ignored for craftability.
-- `Common/UI/UIRecipeTree.cs` — preserves the same root-evaluation rule when swapping alternative recipes.
+- `Common/UI/RecipeAnalyzerUIState.cs` — stored the latest `ScanResult`, updated scan invalidation logic, and rendered the localized chest-count header.
+- `Localization/en-US_Mods.SteroidGuide.hjson` — added English strings for singular and plural nearby-chest status text.
 
 ## How to Test
 1. Build with tModLoader.
-2. Open the Steroid Guide UI with a result item already owned but without enough ingredients to craft another copy, and confirm it does not appear in the craftable list.
-3. Add the missing ingredients for that same result item, confirm it appears in the craftable list, then select it and verify the recipe tree shows stations and ingredient children instead of a single owned root.
-4. Swap alternative recipes in the tree and confirm child craftable/missing states stay consistent.
+2. Open the Steroid Guide UI with no nearby synced chests and confirm the header reads `Referencing 0 nearby chests`.
+3. Move near one synced chest, then multiple synced chests, and confirm the header updates to the correct singular/plural count.
+4. Keep the UI open while moving the camera so chest visibility changes without item totals changing, and confirm the header still refreshes within the normal rescan cadence.
+5. In multiplayer, verify unopened unsynced nearby chests are not counted until the scanner actually includes them.
 
 ## Known Issues
 - None observed.
