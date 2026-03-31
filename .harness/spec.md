@@ -1,42 +1,55 @@
-# Spec: Left Filter Sidebar Polish
+# Spec: Sort Control Visual Refresh
 
 ## Summary
-Fix the analyzer's left filter sidebar so category labels always render as player-facing text instead of raw localization keys, and refresh the sidebar chrome so the outer container and per-filter rows feel visually cohesive in game. This is a UI polish change only; filtering behavior stays the same.
+Refresh the analyzer's sort UI so it matches the rest of the sidebar instead of looking like placeholder text UI. The player should see a compact sort icon in the trigger, no trailing arrow button on the right edge, and graphical selected-state markers inside the dropdown instead of literal `[ ]` / `[*]` text.
 
 ## Detailed Requirements
-1. Each left sidebar category must display a resolved, human-readable label in game. Raw localization keys such as `Mods.SteroidGuide.UI.Filters.Materials` must never be visible to the player.
-2. Filter label resolution must use the mod's localization pipeline first, but if a key is missing, empty, or resolves back to the key string, the UI must show a short English fallback label for that category instead of exposing the key.
-3. The existing filter set, order, and click behavior must remain unchanged: `All`, `Weapons`, `Armor`, `Accessories`, `Tools`, `Consumables`, `Placeables`, `Materials`, `Misc`.
-4. The entire filter row must remain clickable, and the selected state must still be immediately distinguishable without relying on raw text markers.
-5. The left sidebar visual treatment must be adjusted so the outer filter container and the individual filter rows no longer read as mismatched or awkwardly double-bordered elements.
-6. The revised styling may soften, reduce, or remove the outer border if needed, but the sidebar must still read as a distinct grouped control area.
-7. Unselected, hovered, and selected filter rows must retain clear contrast and state feedback after the visual refresh.
-8. The sort control positioned below the filters must continue to align cleanly with the revised sidebar treatment and must not overlap or visually detach from the filter section.
-9. The change must not alter recipe analysis results, category classification rules, pagination, search behavior, or recipe-tree interactions.
-10. The implementation must remain mod-compatible and must not hardcode gameplay item IDs or mod-specific content assumptions.
+1. The collapsed sort trigger must no longer render the literal `"Sort: "` prefix. It must show a graphical sort icon plus the currently selected sort label.
+2. The sort trigger must no longer include a right-side arrow affordance or arrow-only button region. Opening and closing the dropdown must still work by clicking the trigger body.
+3. The currently selected sort mode must remain visible in the collapsed trigger using the existing four labels: `Rarity`, `Name`, `Value`, and `Recipe Depth`.
+4. Opening the sort dropdown must still present the same four sort modes in the same order and must continue to call the existing sorting pipeline when a mode is selected.
+5. Dropdown rows must replace the text-based selection markers (`[ ]`, `[*]`) with graphical indicators. The selected/unselected treatment must visually match the left filter sidebar's indicator language closely enough that both controls read as part of one UI family.
+6. Each sort row must keep a full-row click target, clear hover feedback, and an immediately recognizable selected state without relying on text prefixes.
+7. The dropdown must still close immediately after selecting a sort option, and the item grid must refresh using the newly selected sort.
+8. The change must not alter sort semantics:
+   `Rarity` remains rarity descending then item ID ascending;
+   `Name` remains alphabetical ascending;
+   `Value` remains sell value descending then item ID ascending;
+   `Recipe Depth` remains recipe depth descending then rarity descending.
+9. The visual refresh must stay scoped to the sort trigger/dropdown. It must not change filter behavior, search behavior, pagination behavior, recipe-tree interactions, or recipe analysis results.
+10. The implementation must remain mod-compatible and must not hardcode item IDs, mod content, or assumptions about vanilla-only assets.
 
 ## Technical Design
-- Modify [Common/UI/RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) to stop constructing filter labels from raw localization lookups without fallback. Introduce a filter-label resolution path parallel to the existing search placeholder fallback handling so category text is safe even when localization data is missing or malformed.
-- Extend the `FilterDefinitions` metadata in [Common/UI/RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) so each category carries both its localization key and its fallback display string. Keep `SetFilter`, `UpdateFilterSelectionStates`, and `ApplyFilter` behavior unchanged.
-- Update [Common/UI/UIFilterOption.cs](/Users/sy/projects/steroid-guide/Common/UI/UIFilterOption.cs) as the primary rendering surface for row-level polish. This class already owns the indicator, row background, and border drawing in `DrawSelf`, so it should absorb the style refresh rather than pushing presentational logic into the parent UI state.
-- Adjust the sidebar container styling in [Common/UI/RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) where the filter `UIPanel` is created. The spec expects the container background, padding, and optional border treatment to be retuned so it visually supports the child rows instead of competing with them.
-- Preserve the current Terraria UI framework structure: `UIState.OnInitialize` builds the sidebar, `UIElement.OnLeftClick` handles row interaction, and rendering continues through `SpriteBatch` plus `TextureAssets.MagicPixel`-based primitives where custom drawing is needed.
-- Keep localization data in [Localization/en-US_Mods.SteroidGuide.hjson](/Users/sy/projects/steroid-guide/Localization/en-US_Mods.SteroidGuide.hjson) authoritative for normal display text. The fallback path is a runtime safety net, not a replacement for valid entries.
-- No changes are expected in [Common/ItemCategoryClassifier.cs](/Users/sy/projects/steroid-guide/Common/ItemCategoryClassifier.cs), recipe graph construction, inventory scanning, NPC dialogue, or worldgen systems.
+- Modify [RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) to stop building the sort UI from a `UITextPanel<string>` plus plain `UIText` rows. This file should continue owning sort state (`_currentSort`, `_sortDropdownOpen`) and the existing `ToggleSortDropdown`, `SelectSort`, and `ApplyFilter` flow.
+- Replace the current trigger construction in `OnInitialize()` with a custom sort-trigger element that can draw:
+  a sort icon,
+  the active sort label,
+  hover/open visual state,
+  and no trailing arrow glyph.
+- Add a dedicated dropdown-row renderer for sort options, likely a new file such as [UISortOption.cs](/Users/sy/projects/steroid-guide/Common/UI/UISortOption.cs), rather than continuing to use raw `UIText`. This keeps the graphical indicator, hover styling, and selected-state rendering encapsulated in one place.
+- Add a dedicated trigger renderer, likely [UISortButton.cs](/Users/sy/projects/steroid-guide/Common/UI/UISortButton.cs), if `UITextPanel<string>` cannot express the required icon-first layout cleanly. The trigger should be a single clickable element whose `OnLeftClick` still delegates back to `RecipeAnalyzerUIState.ToggleSortDropdown()`.
+- Reuse the existing sidebar visual language from [UIFilterOption.cs](/Users/sy/projects/steroid-guide/Common/UI/UIFilterOption.cs) as the reference for the dropdown indicator shape, border treatment, and selected-state contrast. Exact pixel-for-pixel reuse is not required, but the design should feel intentionally related.
+- Keep the dropdown container in [RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) positioned under the filter group as it is today. Only its child row rendering and trigger styling should change.
+- Preserve the current Terraria UI hooks and rendering model:
+  `UIState.OnInitialize()` for construction,
+  `UIElement.OnLeftClick` for interaction,
+  and `SpriteBatch` plus `TextureAssets.MagicPixel` for custom shapes.
+- If sort labels need centralized display text, add a small mapping helper in [RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) so both the trigger and dropdown rows use the same label source. This is a display concern only; the `SortCriteria` enum and comparison logic stay unchanged.
+- No changes are expected in [RecipeAnalyzer.cs](/Users/sy/projects/steroid-guide/Common/RecipeAnalyzer.cs), [ItemCategoryClassifier.cs](/Users/sy/projects/steroid-guide/Common/ItemCategoryClassifier.cs), [ItemScanner.cs](/Users/sy/projects/steroid-guide/Common/ItemScanner.cs), NPC code, or world generation.
 
 ## UI/UX
-- The left sidebar should still feel compact and information-dense, but the filter group should read as one composed control instead of a bordered box containing another set of bordered boxes.
-- Selected rows should continue using the indicator plus row styling as the primary affordance.
-- Hover feedback should remain subtle but obvious enough for mouse-driven use.
-- Label text should be stable, readable, and aligned consistently across all filter rows.
+- The sort trigger should read as a compact sidebar control, not a sentence fragment.
+- The sort icon should communicate purpose at a glance without overpowering the current sort label.
+- Dropdown rows should mirror the left filter selector's visual logic so the sidebar feels coherent.
+- Hovered, selected, and idle states must remain distinguishable against the current dark sidebar palette.
 
 ## Success Criteria
-- [ ] Opening the analyzer never shows raw filter localization keys; each category displays readable text.
-- [ ] If a filter localization entry is missing or invalid, the sidebar shows a short fallback label rather than the unresolved key.
-- [ ] The left filter container and its buttons appear visually cohesive, with the current awkward border relationship removed.
-- [ ] Filter selection, hover feedback, row click targets, and sort/filter functionality continue to work as before.
+- [ ] The collapsed sort control shows an icon plus the current sort label and never displays the literal `"Sort: "` text.
+- [ ] The sort trigger no longer shows a right-edge arrow affordance, but clicking it still opens and closes the dropdown reliably.
+- [ ] Sort dropdown rows no longer render `[ ]` or `[*]`; selected state is shown with graphics consistent with the left filter sidebar.
+- [ ] Selecting any sort option still closes the dropdown and reorders the current result set using the existing sort rules.
 
 ## Out of Scope
-- Reordering filter categories or changing category classification logic.
-- Redesigning the main panel, item grid, pagination controls, search box, or recipe tree.
-- Adding new filters, new localization locales, or broader theme changes across the whole analyzer UI.
+- Adding new sort modes or changing the order of the existing sort modes.
+- Localizing sort labels or redesigning unrelated sidebar controls beyond what is needed for visual consistency.
+- Changing filter classification, search input behavior, pagination arrows, recipe-tree rendering, or analysis algorithms.

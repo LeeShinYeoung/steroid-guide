@@ -47,9 +47,9 @@ namespace SteroidGuide.Common.UI
 
         // Sort
         private SortCriteria _currentSort = SortCriteria.Rarity;
-        private UITextPanel<string> _sortButton;
+        private UISortButton _sortButton;
         private UIPanel _sortDropdownPanel;
-        private readonly Dictionary<SortCriteria, UIText> _sortOptions = new();
+        private readonly Dictionary<SortCriteria, UISortOption> _sortOptions = new();
         private bool _sortDropdownOpen;
 
         // Search
@@ -136,15 +136,13 @@ namespace SteroidGuide.Common.UI
             }
 
             // ── Sort dropdown (below filter sidebar) ──
-            _sortButton = new UITextPanel<string>($"Sort: {_currentSort} \u25BC", 0.7f, false);
+            _sortButton = new UISortButton();
             _sortButton.Top.Set(FilterPanelTop + FilterDefinitions.Length * FilterOptionStep + 12f, 0f);
             _sortButton.Left.Set(0f, 0f);
             _sortButton.Width.Set(SidebarPanelWidth, 0f);
             _sortButton.Height.Set(28f, 0f);
-            _sortButton.SetPadding(6f);
-            _sortButton.BackgroundColor = SidebarControlBackgroundColor;
-            _sortButton.BorderColor = SidebarControlBorderColor;
             _sortButton.OnLeftClick += (evt, el) => ToggleSortDropdown();
+            _sortButton.SetState(GetSortLabel(_currentSort), _sortDropdownOpen);
             _mainPanel.Append(_sortButton);
 
             _sortDropdownPanel = new UIPanel();
@@ -159,15 +157,14 @@ namespace SteroidGuide.Common.UI
             float sortY = 0f;
             foreach (SortCriteria sort in Enum.GetValues(typeof(SortCriteria)))
             {
-                string label = sort == SortCriteria.RecipeDepth ? "Recipe Depth" : sort.ToString();
-                string prefix = sort == _currentSort ? "[*]" : "[ ]";
-                var option = new UIText($"{prefix} {label}", 0.7f);
+                var option = new UISortOption(GetSortLabel(sort));
                 option.Top.Set(sortY, 0f);
                 var captured = sort;
                 option.OnLeftClick += (evt, el) => SelectSort(captured);
+                option.SetSelected(sort == _currentSort);
                 _sortDropdownPanel.Append(option);
                 _sortOptions[sort] = option;
-                sortY += 26f;
+                sortY += 24f;
             }
             // Start hidden
             // _sortDropdownPanel is only appended when dropdown is open
@@ -238,6 +235,8 @@ namespace SteroidGuide.Common.UI
             _currentPage = 0;
             _currentFilter = FilterCategory.All;
             _searchQuery = string.Empty;
+            SetSortDropdownOpen(false);
+            _sortButton?.SetState(GetSortLabel(_currentSort), _sortDropdownOpen);
             _searchTextBox?.Reset();
             _recipeTree?.ClearTree();
             UpdateFilterSelectionStates();
@@ -302,29 +301,19 @@ namespace SteroidGuide.Common.UI
 
         private void ToggleSortDropdown()
         {
-            _sortDropdownOpen = !_sortDropdownOpen;
-            if (_sortDropdownOpen)
-                _mainPanel.Append(_sortDropdownPanel);
-            else
-                _mainPanel.RemoveChild(_sortDropdownPanel);
+            SetSortDropdownOpen(!_sortDropdownOpen);
         }
 
         private void SelectSort(SortCriteria sort)
         {
             _currentSort = sort;
-            _sortButton.SetText($"Sort: {(sort == SortCriteria.RecipeDepth ? "Recipe Depth" : sort.ToString())} \u25BC");
+            _sortButton?.SetState(GetSortLabel(sort), _sortDropdownOpen);
             foreach (var (s, option) in _sortOptions)
             {
-                string label = s == SortCriteria.RecipeDepth ? "Recipe Depth" : s.ToString();
-                string prefix = s == _currentSort ? "[*]" : "[ ]";
-                option.SetText($"{prefix} {label}");
+                option.SetSelected(s == _currentSort);
             }
-            // Close dropdown
-            if (_sortDropdownOpen)
-            {
-                _sortDropdownOpen = false;
-                _mainPanel.RemoveChild(_sortDropdownPanel);
-            }
+
+            SetSortDropdownOpen(false);
             ApplyFilter();
         }
 
@@ -521,6 +510,34 @@ namespace SteroidGuide.Common.UI
             return string.IsNullOrWhiteSpace(resolvedText) || string.Equals(resolvedText, key, StringComparison.Ordinal)
                 ? fallback
                 : resolvedText;
+        }
+
+        private void SetSortDropdownOpen(bool open)
+        {
+            _sortDropdownOpen = open;
+            _sortButton?.SetState(GetSortLabel(_currentSort), _sortDropdownOpen);
+
+            if (_sortDropdownPanel == null || _mainPanel == null)
+            {
+                return;
+            }
+
+            if (_sortDropdownOpen)
+            {
+                if (_sortDropdownPanel.Parent == null)
+                {
+                    _mainPanel.Append(_sortDropdownPanel);
+                }
+            }
+            else if (_sortDropdownPanel.Parent != null)
+            {
+                _mainPanel.RemoveChild(_sortDropdownPanel);
+            }
+        }
+
+        private static string GetSortLabel(SortCriteria sort)
+        {
+            return sort == SortCriteria.RecipeDepth ? "Recipe Depth" : sort.ToString();
         }
 
         private static bool DictEquals(Dictionary<int, int> a, Dictionary<int, int> b)

@@ -1,18 +1,20 @@
 # Build Report
 
 ## Implemented
-- [x] Added safe filter label resolution so the analyzer sidebar never shows raw localization keys and falls back to short English labels when localization is missing or malformed.
-- [x] Polished the left filter sidebar and adjacent sort control so the group reads as one cohesive control area while preserving filter order, click behavior, hover feedback, and selected-state clarity.
+- [x] Refreshed the analyzer sort trigger so it shows a compact graphical sort icon plus the active sort label without the old `Sort:` prefix or right-edge arrow affordance.
+- [x] Replaced the sort dropdown's text-based `[ ]` / `[*]` markers with graphical option rows that match the left sidebar's hover and selected-state language while preserving the existing sort behavior and selection flow.
 
 ## Files Changed
-- `Common/UI/RecipeAnalyzerUIState.cs` — extended filter metadata with fallback labels, routed filter text through the localization fallback helper, and refreshed the sidebar/sort container styling.
-- `Common/UI/UIFilterOption.cs` — retuned row rendering with softer borders, clearer hover/selected states, and more cohesive accent/separator treatment.
+- `Common/UI/RecipeAnalyzerUIState.cs` — swapped the old text-based sort UI to custom controls, centralized sort display labels, and kept the existing dropdown/select/apply flow intact.
+- `Common/UI/UISortButton.cs` — added a custom icon-first sort trigger renderer with hover/open states and no trailing arrow region.
+- `Common/UI/UISortOption.cs` — added full-row sort dropdown rows with graphical indicators styled to match the filter sidebar.
 
 ## How to Test
 1. Build with tModLoader using `dotnet build -p:TModLoaderTargetsPath=/Users/sy/.local/share/tModLoader/tMLMod.targets`.
-2. Open the Steroid Guide analyzer UI and inspect the left filter sidebar.
-3. Verify all categories read `All`, `Weapons`, `Armor`, `Accessories`, `Tools`, `Consumables`, `Placeables`, `Materials`, and `Misc` rather than raw localization keys.
-4. Hover and click different filter rows to confirm the full row remains clickable, the active row is clearly selected, and the sort control still aligns cleanly below the filters.
+2. Open the Steroid Guide analyzer UI and inspect the sort control under the left filter sidebar.
+3. Verify the collapsed trigger shows a graphical sort icon plus one of `Rarity`, `Name`, `Value`, or `Recipe Depth`, with no literal `Sort:` prefix or arrow-only button area.
+4. Open the dropdown, confirm each row uses a graphical selected indicator instead of `[ ]` / `[*]`, and check that hover/selected states read consistently with the filter sidebar.
+5. Select each sort mode and confirm the dropdown closes immediately and the result grid reorders using the existing sort semantics.
 
 ## Known Issues
 - None.
