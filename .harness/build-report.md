@@ -1,18 +1,19 @@
 # Build Report
 
 ## Implemented
-- [x] Stabilized the Steroid Guide body rendering by using the vanilla Guide town-NPC body texture/profile path for all draw states.
-- [x] Sourced the Steroid Guide animation frame metadata directly from `NPCID.Guide` runtime values instead of hand-maintained literals.
+- [x] Replaced the analyzer panel's text `X` close button with a custom-drawn graphic close button that keeps the existing `HideUI()` behavior.
+- [x] Centered the close icon with pixel-snapped diagonal strokes and added hover-state button chrome consistent with the rest of the analyzer UI.
 
 ## Files Changed
-- `Content/NPCs/SteroidGuideNPC.cs` — replaced the bespoke body profile with the vanilla Guide `LegacyNPCProfile`, aligned the body texture path with that profile, and copied Guide animation metadata from runtime values.
+- `Common/UI/RecipeAnalyzerUIState.cs` — swapped the inline `UITextPanel<string>("X")` close control for the dedicated close button element and kept the existing click handler.
+- `Common/UI/UICloseButton.cs` — added a custom `UIElement` that draws the close button background, border, and centered `X` icon with `MagicPixel`.
 
 ## How to Test
 1. Build with tModLoader.
-2. Spawn or find the Steroid Guide in-game and watch the NPC while idle, walking, and turning.
-3. Confirm the full body always matches the vanilla Guide art without sliced or stretched animation frames.
-4. Talk to the Steroid Guide, verify the custom head icon still appears in housing/chat UI, and click `Analyze Recipes`.
-5. While the analyzer is open, confirm the NPC still freezes in place until the interaction closes.
+2. Open the Steroid Guide analyzer UI in-game.
+3. Verify the top-right close control is a graphic button, not a text-rendered `X`.
+4. Hover the button and confirm the hover state changes clearly.
+5. Click the button and confirm the analyzer closes, while ESC close and walking away from the NPC still behave as before.
 
 ## Known Issues
-- None observed.
+- None.
