@@ -96,7 +96,7 @@ namespace SteroidGuide.Common.UI
             AddChildren(root, 0, emptyParentLines);
 
             // Alternative recipe button for root
-            if (root.AlternativeRecipes != null && root.AlternativeRecipes.Count > 0)
+            if (HasAlternativeRecipes(root))
             {
                 var capturedRoot = root;
                 AddTreeTextLine("Alternative Recipe \u25B6", new Color(150, 200, 255), 0.7f,
@@ -129,14 +129,14 @@ namespace SteroidGuide.Common.UI
                     _ => Color.IndianRed
                 };
 
-                bool hasCraftableChildren = child.Status == NodeStatus.Craftable
-                    && child.Children != null && child.Children.Count > 0;
-                bool isCollapsed = _collapsedItemIds.Contains(child.ItemId);
+                bool hasRecipeDetails = HasRecipeDetails(child);
+                bool hasDisplayableChildren = HasDisplayableRecipeChildren(child);
+                bool isCollapsed = IsCollapsed(child);
 
                 string suffix = $"{countStr}{statusStr}";
 
                 TriangleState triangleState = TriangleState.None;
-                if (hasCraftableChildren)
+                if (hasDisplayableChildren)
                     triangleState = isCollapsed ? TriangleState.Collapsed : TriangleState.Expanded;
 
                 var line = new UITreeItemLine(child.ItemId, suffix, color, 0.7f,
@@ -144,7 +144,7 @@ namespace SteroidGuide.Common.UI
                 line.Width.Set(0f, 1f);
                 line.Height.Set(24f, 0f);
 
-                if (hasCraftableChildren)
+                if (hasDisplayableChildren)
                 {
                     var capturedChild = child;
                     line.OnLeftClick += (evt, el) => ToggleCollapse(capturedChild.ItemId);
@@ -153,17 +153,15 @@ namespace SteroidGuide.Common.UI
                 _list.Add(line);
 
                 // Show children if not collapsed
-                if (hasCraftableChildren && !isCollapsed)
+                if (hasRecipeDetails && !isCollapsed)
                 {
                     var childParentLines = new List<bool>(parentLines) { !isLast };
 
-                    if (child.UsedRecipe != null)
-                        AddCraftingStationLine(child.UsedRecipe, depth + 1, childParentLines);
+                    AddCraftingStationLine(child.UsedRecipe, depth + 1, childParentLines);
 
                     AddChildren(child, depth + 1, childParentLines);
 
-                    // Alternative Recipe button
-                    if (child.AlternativeRecipes != null && child.AlternativeRecipes.Count > 0)
+                    if (HasAlternativeRecipes(child))
                     {
                         var capturedChild = child;
                         AddTreeTextLine("Alternative Recipe \u25B6", new Color(150, 200, 255), 0.65f,
@@ -184,18 +182,20 @@ namespace SteroidGuide.Common.UI
 
         private void SwapAlternativeRecipe(RecipeTreeNode node)
         {
-            if (node.AlternativeRecipes == null || node.AlternativeRecipes.Count == 0)
+            if (!HasAlternativeRecipes(node))
                 return;
 
             // Rotate: current recipe goes to end of alternatives, first alternative becomes current
             var oldRecipe = node.UsedRecipe;
             node.UsedRecipe = node.AlternativeRecipes[0];
             node.AlternativeRecipes.RemoveAt(0);
-            node.AlternativeRecipes.Add(oldRecipe);
+            if (oldRecipe != null)
+                node.AlternativeRecipes.Add(oldRecipe);
 
             // Rebuild children for this node with the new recipe
-            if (_currentGraph != null && _currentAvailable != null)
+            if (node.UsedRecipe != null && _currentGraph != null && _currentAvailable != null)
             {
+                node.Children ??= new List<RecipeTreeNode>();
                 node.Children.Clear();
                 int usableOwnedCount = node.IgnoreOwnedForCraftability ? 0 : node.OwnedCount;
                 int remaining = Math.Max(1, node.RequiredCount - usableOwnedCount);
@@ -211,21 +211,45 @@ namespace SteroidGuide.Common.UI
                         ingredient.type, ingredientNeeded, _currentGraph, _currentAvailable));
                 }
 
-                // Update node status based on new children
-                bool canMake = true;
-                foreach (var child in node.Children)
-                {
-                    if (child.Status == NodeStatus.Missing)
-                    {
-                        canMake = false;
-                        break;
-                    }
-                }
-                node.Status = canMake ? NodeStatus.Craftable : NodeStatus.Missing;
+                node.Status = GetStatusForSelectedRecipe(node.Children);
             }
 
             // Re-render tree
             SetTree(_currentRoot);
+        }
+
+        private static bool HasRecipeDetails(RecipeTreeNode node)
+        {
+            return node?.UsedRecipe != null && node.Children != null;
+        }
+
+        private static bool HasDisplayableRecipeChildren(RecipeTreeNode node)
+        {
+            return HasRecipeDetails(node) && node.Children.Count > 0;
+        }
+
+        private bool IsCollapsed(RecipeTreeNode node)
+        {
+            return HasDisplayableRecipeChildren(node) && _collapsedItemIds.Contains(node.ItemId);
+        }
+
+        private static bool HasAlternativeRecipes(RecipeTreeNode node)
+        {
+            return node?.AlternativeRecipes != null && node.AlternativeRecipes.Count > 0;
+        }
+
+        private static NodeStatus GetStatusForSelectedRecipe(List<RecipeTreeNode> children)
+        {
+            if (children == null)
+                return NodeStatus.Missing;
+
+            foreach (var child in children)
+            {
+                if (child.Status == NodeStatus.Missing)
+                    return NodeStatus.Missing;
+            }
+
+            return NodeStatus.Craftable;
         }
 
         private void AddCraftingStationLine(Recipe recipe, int depth, List<bool> parentLines)
