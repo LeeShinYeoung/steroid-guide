@@ -13,10 +13,8 @@ namespace SteroidGuide.Common.UI
         private const float HorizontalPadding = 10f;
         private const float VerticalPadding = 8f;
         private const float TextScale = 0.8f;
-        private const float ClearTextGap = 10f;
 
         private readonly string _placeholderText;
-        private readonly string _clearText;
         private readonly int _maxLength;
         private string _text = string.Empty;
 
@@ -25,57 +23,16 @@ namespace SteroidGuide.Common.UI
         public bool IsFocused { get; private set; }
         public string Text => _text;
 
-        public UISearchTextBox(string placeholderText, string clearText, int maxLength = 64)
+        public UISearchTextBox(string placeholderText, int maxLength = 64)
         {
             _placeholderText = placeholderText ?? string.Empty;
-            _clearText = clearText ?? string.Empty;
             _maxLength = Math.Max(1, maxLength);
         }
 
         public override void LeftClick(UIMouseEvent evt)
         {
             base.LeftClick(evt);
-
             Focus();
-
-            if (HasClearButton && GetClearButtonRectangle().Contains(evt.MousePosition.ToPoint()))
-            {
-                SetText(string.Empty);
-            }
-        }
-
-        public override void Update(GameTime gameTime)
-        {
-            base.Update(gameTime);
-
-            if (Main.mouseLeft && Main.mouseLeftRelease && IsFocused && !ContainsPoint(Main.MouseScreen))
-            {
-                Unfocus();
-            }
-
-            if (!IsFocused)
-            {
-                return;
-            }
-
-            if (Main.LocalPlayer != null)
-            {
-                Main.LocalPlayer.mouseInterface = true;
-            }
-
-            PlayerInput.WritingText = true;
-
-            string updatedText = Main.GetInputText(_text);
-            if (updatedText.Length > _maxLength)
-            {
-                updatedText = updatedText[.._maxLength];
-            }
-
-            if (!string.Equals(updatedText, _text, StringComparison.Ordinal))
-            {
-                _text = updatedText;
-                OnTextChanged?.Invoke(_text);
-            }
         }
 
         protected override void DrawSelf(SpriteBatch spriteBatch)
@@ -94,10 +51,7 @@ namespace SteroidGuide.Common.UI
             DrawBorder(spriteBatch, bounds, borderColor, 2);
 
             bool drawPlaceholder = string.IsNullOrEmpty(_text);
-            float clearWidth = HasClearButton
-                ? FontAssets.MouseText.Value.MeasureString(_clearText).X * TextScale + ClearTextGap
-                : 0f;
-            float maxTextWidth = Math.Max(0f, dims.Width - HorizontalPadding * 2f - clearWidth);
+            float maxTextWidth = Math.Max(0f, dims.Width - HorizontalPadding * 2f);
             Vector2 textPosition = new(dims.X + HorizontalPadding, dims.Y + VerticalPadding);
 
             if (drawPlaceholder)
@@ -112,18 +66,6 @@ namespace SteroidGuide.Common.UI
                     : _text;
                 string trimmedText = TrimTextToFit(typedText, maxTextWidth);
                 Utils.DrawBorderString(spriteBatch, trimmedText, textPosition, Color.White, TextScale);
-            }
-
-            if (HasClearButton)
-            {
-                Rectangle clearRect = GetClearButtonRectangle();
-                bool hover = clearRect.Contains(Main.mouseX, Main.mouseY);
-                Color clearColor = hover ? Color.White : new Color(205, 205, 205);
-                Vector2 clearSize = FontAssets.MouseText.Value.MeasureString(_clearText) * TextScale;
-                Vector2 clearPosition = new(
-                    clearRect.X + (clearRect.Width - clearSize.X) * 0.5f,
-                    clearRect.Y + (clearRect.Height - clearSize.Y) * 0.5f);
-                Utils.DrawBorderString(spriteBatch, _clearText, clearPosition, clearColor, TextScale);
             }
         }
 
@@ -167,6 +109,30 @@ namespace SteroidGuide.Common.UI
             return true;
         }
 
+        public void UpdateFocusedTextInput()
+        {
+            if (!IsFocused)
+            {
+                return;
+            }
+
+            if (Main.mouseLeft && Main.mouseLeftRelease && !ContainsPoint(Main.MouseScreen))
+            {
+                Unfocus();
+                return;
+            }
+
+            if (Main.LocalPlayer != null)
+            {
+                Main.LocalPlayer.mouseInterface = true;
+            }
+
+            PlayerInput.WritingText = true;
+
+            string updatedText = Main.GetInputText(_text);
+            SetText(updatedText);
+        }
+
         private void SetText(string newText)
         {
             newText ??= string.Empty;
@@ -184,22 +150,9 @@ namespace SteroidGuide.Common.UI
             OnTextChanged?.Invoke(_text);
         }
 
-        private bool HasClearButton => !string.IsNullOrEmpty(_text) && !string.IsNullOrEmpty(_clearText);
-
         private bool ShouldDrawCaret()
         {
             return IsFocused && (int)(Main.GlobalTimeWrappedHourly * 2f) % 2 == 0;
-        }
-
-        private Rectangle GetClearButtonRectangle()
-        {
-            CalculatedStyle dims = GetDimensions();
-            float clearWidth = FontAssets.MouseText.Value.MeasureString(_clearText).X * TextScale + ClearTextGap;
-            return new Rectangle(
-                (int)(dims.X + dims.Width - clearWidth - HorizontalPadding * 0.5f),
-                (int)dims.Y,
-                (int)(clearWidth + HorizontalPadding * 0.5f),
-                (int)dims.Height);
         }
 
         private static string TrimTextToFit(string text, float maxWidth)
