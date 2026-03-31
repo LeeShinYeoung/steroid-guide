@@ -1,20 +1,22 @@
 # Build Report
 
 ## Implemented
-- [x] Refreshed the analyzer sort trigger so it shows a compact graphical sort icon plus the active sort label without the old `Sort:` prefix or right-edge arrow affordance.
-- [x] Replaced the sort dropdown's text-based `[ ]` / `[*]` markers with graphical option rows that match the left sidebar's hover and selected-state language while preserving the existing sort behavior and selection flow.
+- [x] Added hover-scoped mouse-wheel pagination for the craftable item grid so each wheel notch moves exactly one page through results.
+- [x] Routed wheel pagination through the existing page-change logic so grid contents, `Page X/Y` text, and pagination button enabled states stay in sync.
+- [x] Kept wheel pagination isolated to `UIItemGrid`, leaving recipe-tree scrolling and other analyzer controls unchanged.
 
 ## Files Changed
-- `Common/UI/RecipeAnalyzerUIState.cs` — swapped the old text-based sort UI to custom controls, centralized sort display labels, and kept the existing dropdown/select/apply flow intact.
-- `Common/UI/UISortButton.cs` — added a custom icon-first sort trigger renderer with hover/open states and no trailing arrow region.
-- `Common/UI/UISortOption.cs` — added full-row sort dropdown rows with graphical indicators styled to match the filter sidebar.
+- `Common/UI/RecipeAnalyzerUIState.cs` — hooked the item grid wheel callback into a guarded pagination entry point that validates page bounds before calling the existing `ChangePage(int delta)` method.
+- `Common/UI/UIItemGrid.cs` — added a hover-only scroll-wheel handler and callback so the grid reports wheel pagination requests without owning page state.
+- `.harness/build-report.md` — updated the report for this feature.
 
 ## How to Test
 1. Build with tModLoader using `dotnet build -p:TModLoaderTargetsPath=/Users/sy/.local/share/tModLoader/tMLMod.targets`.
-2. Open the Steroid Guide analyzer UI and inspect the sort control under the left filter sidebar.
-3. Verify the collapsed trigger shows a graphical sort icon plus one of `Rarity`, `Name`, `Value`, or `Recipe Depth`, with no literal `Sort:` prefix or arrow-only button area.
-4. Open the dropdown, confirm each row uses a graphical selected indicator instead of `[ ]` / `[*]`, and check that hover/selected states read consistently with the filter sidebar.
-5. Select each sort mode and confirm the dropdown closes immediately and the result grid reorders using the existing sort semantics.
+2. Open the Steroid Guide analyzer UI with enough craftable results to produce multiple pages.
+3. Hover the cursor over the craftable item grid and scroll up/down; confirm each wheel notch moves exactly one page and updates the page label plus arrow enabled state.
+4. Hover the pagination row, search box, filter sidebar, sort dropdown, recipe tree, and empty panel space; confirm wheel input does not change the current grid page there.
+5. Hover the recipe tree and scroll; confirm the tree still scrolls normally instead of paging the item grid.
+6. On the first and last page, keep scrolling past the bounds; confirm nothing desyncs and the page stays within valid limits.
 
 ## Known Issues
 - None.

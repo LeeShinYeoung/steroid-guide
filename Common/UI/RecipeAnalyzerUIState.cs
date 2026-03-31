@@ -187,6 +187,7 @@ namespace SteroidGuide.Common.UI
             _itemGrid.Width.Set(650f, 0f);
             _itemGrid.Height.Set(226f, 0f);
             _itemGrid.OnItemSelected += OnItemSelected;
+            _itemGrid.OnPageScrollRequested += TryChangePageFromScroll;
             _mainPanel.Append(_itemGrid);
 
             // ── Pagination ──
@@ -433,6 +434,23 @@ namespace SteroidGuide.Common.UI
                 UpdateGrid();
                 UpdatePageText();
             }
+        }
+
+        private void TryChangePageFromScroll(int scrollDelta)
+        {
+            if (scrollDelta == 0 || _totalPages <= 1)
+            {
+                return;
+            }
+
+            int pageDelta = scrollDelta > 0 ? -1 : 1;
+            int requestedPage = _currentPage + pageDelta;
+            if (requestedPage < 0 || requestedPage >= _totalPages)
+            {
+                return;
+            }
+
+            ChangePage(pageDelta);
         }
 
         private void UpdatePaginationButtonState()
