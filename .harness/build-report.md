@@ -1,22 +1,17 @@
 # Build Report
 
 ## Implemented
-- [x] Added hover-scoped mouse-wheel pagination for the craftable item grid so each wheel notch moves exactly one page through results.
-- [x] Routed wheel pagination through the existing page-change logic so grid contents, `Page X/Y` text, and pagination button enabled states stay in sync.
-- [x] Kept wheel pagination isolated to `UIItemGrid`, leaving recipe-tree scrolling and other analyzer controls unchanged.
+- [x] Replaced recipe-tree crafting-station prose with an icon-first station row that resolves per-tile display items dynamically, falls back to station-name badges, and refreshes with alternative recipe swaps.
 
 ## Files Changed
-- `Common/UI/RecipeAnalyzerUIState.cs` — hooked the item grid wheel callback into a guarded pagination entry point that validates page bounds before calling the existing `ChangePage(int delta)` method.
-- `Common/UI/UIItemGrid.cs` — added a hover-only scroll-wheel handler and callback so the grid reports wheel pagination requests without owning page state.
-- `.harness/build-report.md` — updated the report for this feature.
+- `Common/UI/UIRecipeTree.cs` — added cached tile-to-item resolution, station-row rendering, hover/fallback handling, and moved station rows directly under the active recipe node.
+- `Localization/en-US_Mods.SteroidGuide.hjson` — added the compact localized station label used by the recipe tree.
 
 ## How to Test
 1. Build with tModLoader using `dotnet build -p:TModLoaderTargetsPath=/Users/sy/.local/share/tModLoader/tMLMod.targets`.
-2. Open the Steroid Guide analyzer UI with enough craftable results to produce multiple pages.
-3. Hover the cursor over the craftable item grid and scroll up/down; confirm each wheel notch moves exactly one page and updates the page label plus arrow enabled state.
-4. Hover the pagination row, search box, filter sidebar, sort dropdown, recipe tree, and empty panel space; confirm wheel input does not change the current grid page there.
-5. Hover the recipe tree and scroll; confirm the tree still scrolls normally instead of paging the item grid.
-6. On the first and last page, keep scrolling past the bounds; confirm nothing desyncs and the page stays within valid limits.
+2. Open the Steroid Guide UI and select craftable items with recipes that require one or multiple stations.
+3. Verify the recipe tree shows a `Station` badge row with item icons where available, fallback name pills when not, and matching station names on hover.
+4. Swap to an alternative recipe and confirm the station row updates immediately to the new recipe's required stations.
 
 ## Known Issues
-- None.
+- None noted from build verification.

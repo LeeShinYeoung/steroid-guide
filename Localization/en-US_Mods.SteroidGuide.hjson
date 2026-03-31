@@ -26,6 +26,10 @@ UI: {
 	NoCraftableItems: No craftable items found.
 	NoItemsInCategory: No craftable items match the selected category.
 
+	RecipeTree: {
+		StationLabel: Station
+	}
+
 	Filters: {
 		All: All
 		Weapons: Weapons
