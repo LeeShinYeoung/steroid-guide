@@ -6,7 +6,6 @@ using Terraria;
 using Terraria.GameContent;
 using Terraria.GameContent.UI.Elements;
 using Terraria.ID;
-using Terraria.Localization;
 using Terraria.Map;
 using Terraria.ModLoader;
 using Terraria.UI;
@@ -15,7 +14,6 @@ namespace SteroidGuide.Common.UI
 {
     public class UIRecipeTree : UIElement
     {
-        private const string StationLabelKey = "Mods.SteroidGuide.UI.RecipeTree.StationLabel";
         private const string EmptyStateText = "Click an item above to view its recipe tree.";
         private const string AlternativeRecipeText = "Alternative Recipe";
         private UIList _list;
@@ -258,11 +256,7 @@ namespace SteroidGuide.Common.UI
             List<StationDisplayInfo> stations = ResolveStations(recipe);
             if (stations.Count > 0)
             {
-                var line = new UITreeStationLine(
-                    stations,
-                    ResolveLocalizedText(StationLabelKey, "Station"),
-                    depth,
-                    parentLines);
+                var line = new UITreeStationLine(stations, depth, parentLines);
                 line.Width.Set(0f, 1f);
                 line.Height.Set(34f, 0f);
                 _list.Add(line);
@@ -359,17 +353,6 @@ namespace SteroidGuide.Common.UI
             }
 
             return false;
-        }
-
-        private static string ResolveLocalizedText(string key, string fallback)
-        {
-            if (!Language.Exists(key))
-                return fallback;
-
-            string resolvedText = Language.GetTextValue(key);
-            return string.IsNullOrWhiteSpace(resolvedText) || string.Equals(resolvedText, key, StringComparison.Ordinal)
-                ? fallback
-                : resolvedText;
         }
 
         private void AddTreeTextLine(string text, Color color, float scale, int depth, List<bool> parentLines, Action onClick = null)
@@ -590,33 +573,26 @@ namespace SteroidGuide.Common.UI
 
         private class UITreeStationLine : UIElement
         {
-            private const float LabelScale = 0.58f;
             private const float FallbackScale = 0.58f;
             private const float HorizontalPadding = 4f;
             private const float VerticalPadding = 4f;
             private const float BadgeSize = 24f;
             private const float BadgeSpacing = 6f;
             private const float RowSpacing = 4f;
-            private const float LabelPaddingX = 7f;
-            private const float LabelPaddingY = 4f;
             private const float MaxFallbackBadgeWidth = 140f;
 
-            private static readonly Color LabelBackgroundColor = new(50, 82, 112, 210);
-            private static readonly Color LabelBorderColor = new(122, 162, 198, 220);
             private static readonly Color BadgeBackgroundColor = new(40, 56, 88, 210);
             private static readonly Color BadgeBorderColor = new(124, 166, 214, 200);
             private static readonly Color BadgeHoverColor = new(82, 112, 154, 220);
             private static readonly Color FallbackTextColor = new(225, 235, 248);
 
-            private readonly string _label;
             private readonly int _depth;
             private readonly List<bool> _parentLines;
             private readonly List<StationDisplayInfo> _stations;
 
-            public UITreeStationLine(List<StationDisplayInfo> stations, string label, int depth, List<bool> parentLines)
+            public UITreeStationLine(List<StationDisplayInfo> stations, int depth, List<bool> parentLines)
             {
                 _stations = stations ?? new List<StationDisplayInfo>();
-                _label = label;
                 _depth = depth;
                 _parentLines = parentLines != null ? new List<bool>(parentLines) : null;
             }
@@ -643,23 +619,7 @@ namespace SteroidGuide.Common.UI
 
                 float contentX = x + (_depth + 1) * DepthIndent + HorizontalPadding;
                 float contentRight = dims.X + dims.Width - HorizontalPadding;
-                Vector2 labelSize = FontAssets.MouseText.Value.MeasureString(_label) * LabelScale;
-                Rectangle labelRect = new(
-                    (int)contentX,
-                    (int)(y + VerticalPadding),
-                    (int)Math.Ceiling(labelSize.X + LabelPaddingX * 2f),
-                    (int)Math.Ceiling(labelSize.Y + LabelPaddingY * 2f));
-
-                DrawFramedBox(spriteBatch, labelRect, LabelBackgroundColor, LabelBorderColor);
-                Utils.DrawBorderString(
-                    spriteBatch,
-                    _label,
-                    new Vector2(labelRect.X + LabelPaddingX, labelRect.Y + LabelPaddingY - 1f),
-                    Color.White,
-                    LabelScale);
-
-                float firstRowStartX = labelRect.Right + BadgeSpacing;
-                float currentX = firstRowStartX;
+                float currentX = contentX;
                 float currentY = y + VerticalPadding;
                 float rowStartX = contentX;
                 float rowHeight = BadgeSize;
@@ -697,10 +657,8 @@ namespace SteroidGuide.Common.UI
                     return BadgeSize + VerticalPadding * 2f;
 
                 float contentWidth = Math.Max(0f, width - (_depth + 1) * DepthIndent - HorizontalPadding * 2f);
-                Vector2 labelSize = FontAssets.MouseText.Value.MeasureString(_label) * LabelScale;
-                float labelWidth = labelSize.X + LabelPaddingX * 2f;
                 float availableWidth = Math.Max(BadgeSize, contentWidth);
-                float currentX = Math.Min(availableWidth, labelWidth + BadgeSpacing);
+                float currentX = 0f;
                 float rowStartX = 0f;
                 int rows = 1;
                 foreach (StationDisplayInfo station in _stations)
