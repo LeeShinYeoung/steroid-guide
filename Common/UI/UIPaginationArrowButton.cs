@@ -46,27 +46,28 @@ namespace SteroidGuide.Common.UI
 
         private void DrawArrow(SpriteBatch spriteBatch, Rectangle bounds, Color color)
         {
-            Vector2 center = new(bounds.Center.X, bounds.Center.Y);
+            Vector2 center = new(bounds.X + bounds.Width * 0.5f, bounds.Y + bounds.Height * 0.5f);
             float arrowHalfWidth = MathF.Max(5f, bounds.Width * 0.18f);
             float arrowHalfHeight = MathF.Max(5f, bounds.Height * 0.24f);
             float thickness = 3f;
+            float directionSign = _direction == PaginationArrowDirection.Left ? -1f : 1f;
 
-            if (_direction == PaginationArrowDirection.Left)
+            Vector2[] chevronPoints =
+            [
+                new(-arrowHalfWidth, -arrowHalfHeight),
+                new(arrowHalfWidth, 0f),
+                new(-arrowHalfWidth, arrowHalfHeight)
+            ];
+
+            for (int i = 0; i < chevronPoints.Length; i++)
             {
-                Vector2 tip = new(center.X - arrowHalfWidth, center.Y);
-                Vector2 top = new(center.X + arrowHalfWidth, center.Y - arrowHalfHeight);
-                Vector2 bottom = new(center.X + arrowHalfWidth, center.Y + arrowHalfHeight);
-                DrawLine(spriteBatch, top, tip, color, thickness);
-                DrawLine(spriteBatch, tip, bottom, color, thickness);
+                Vector2 point = chevronPoints[i];
+                point.X *= directionSign;
+                chevronPoints[i] = PixelSnap(center + point);
             }
-            else
-            {
-                Vector2 tip = new(center.X + arrowHalfWidth, center.Y);
-                Vector2 top = new(center.X - arrowHalfWidth, center.Y - arrowHalfHeight);
-                Vector2 bottom = new(center.X - arrowHalfWidth, center.Y + arrowHalfHeight);
-                DrawLine(spriteBatch, top, tip, color, thickness);
-                DrawLine(spriteBatch, tip, bottom, color, thickness);
-            }
+
+            DrawLine(spriteBatch, chevronPoints[0], chevronPoints[1], color, thickness);
+            DrawLine(spriteBatch, chevronPoints[1], chevronPoints[2], color, thickness);
         }
 
         private static void DrawRect(SpriteBatch spriteBatch, Rectangle rectangle, Color color)
@@ -85,9 +86,27 @@ namespace SteroidGuide.Common.UI
         private static void DrawLine(SpriteBatch spriteBatch, Vector2 start, Vector2 end, Color color, float thickness)
         {
             Vector2 edge = end - start;
+            if (edge.LengthSquared() <= 0f)
+            {
+                return;
+            }
+
             float angle = MathF.Atan2(edge.Y, edge.X);
-            var destination = new Rectangle((int)start.X, (int)start.Y, (int)edge.Length(), (int)thickness);
-            spriteBatch.Draw(TextureAssets.MagicPixel.Value, destination, null, color, angle, Vector2.Zero, SpriteEffects.None, 0f);
+            spriteBatch.Draw(
+                TextureAssets.MagicPixel.Value,
+                start,
+                null,
+                color,
+                angle,
+                new Vector2(0f, 0.5f),
+                new Vector2(edge.Length(), thickness),
+                SpriteEffects.None,
+                0f);
+        }
+
+        private static Vector2 PixelSnap(Vector2 point)
+        {
+            return new Vector2(MathF.Round(point.X), MathF.Round(point.Y));
         }
     }
 }
