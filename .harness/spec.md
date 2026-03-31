@@ -1,37 +1,42 @@
-# Spec: Pagination Left Arrow Rendering Fix
+# Spec: Left Filter Sidebar Polish
 
 ## Summary
-Fix the analyzer pagination control so the left arrow renders as a clean mirror of the right arrow in every UI state. This removes a visible polish issue in the main item browser without changing pagination behavior.
+Fix the analyzer's left filter sidebar so category labels always render as player-facing text instead of raw localization keys, and refresh the sidebar chrome so the outer container and per-filter rows feel visually cohesive in game. This is a UI polish change only; filtering behavior stays the same.
 
 ## Detailed Requirements
-1. The left pagination arrow must render without the current broken, jagged, or visibly asymmetric segment artifact seen in game.
-2. The left and right pagination arrows must use the same chevron shape, stroke thickness, padding, and visual centering, differing only by horizontal direction.
-3. Visual parity must hold across all existing button states: enabled, disabled, and hover.
-4. The fix must preserve the current click target, enable/disable rules, page-change behavior, and centered pagination layout.
-5. The button must continue using runtime-drawn UI graphics; do not introduce side-specific texture assets for the arrow.
-6. Arrow rendering must stay stable at Terraria UI scale and with the current `30x24` button sizing used by the analyzer.
-7. The fix must remain fully mod-compatible and must not depend on item IDs, recipe content, or other gameplay data.
+1. Each left sidebar category must display a resolved, human-readable label in game. Raw localization keys such as `Mods.SteroidGuide.UI.Filters.Materials` must never be visible to the player.
+2. Filter label resolution must use the mod's localization pipeline first, but if a key is missing, empty, or resolves back to the key string, the UI must show a short English fallback label for that category instead of exposing the key.
+3. The existing filter set, order, and click behavior must remain unchanged: `All`, `Weapons`, `Armor`, `Accessories`, `Tools`, `Consumables`, `Placeables`, `Materials`, `Misc`.
+4. The entire filter row must remain clickable, and the selected state must still be immediately distinguishable without relying on raw text markers.
+5. The left sidebar visual treatment must be adjusted so the outer filter container and the individual filter rows no longer read as mismatched or awkwardly double-bordered elements.
+6. The revised styling may soften, reduce, or remove the outer border if needed, but the sidebar must still read as a distinct grouped control area.
+7. Unselected, hovered, and selected filter rows must retain clear contrast and state feedback after the visual refresh.
+8. The sort control positioned below the filters must continue to align cleanly with the revised sidebar treatment and must not overlap or visually detach from the filter section.
+9. The change must not alter recipe analysis results, category classification rules, pagination, search behavior, or recipe-tree interactions.
+10. The implementation must remain mod-compatible and must not hardcode gameplay item IDs or mod-specific content assumptions.
 
 ## Technical Design
-- Modify [Common/UI/UIPaginationArrowButton.cs](/Users/sy/projects/steroid-guide/Common/UI/UIPaginationArrowButton.cs) as the primary implementation point, because it owns the custom chevron drawing inside `UIElement.DrawSelf`.
-- Replace the current duplicated left/right point construction with one shared chevron geometry model and mirror it horizontally based on `PaginationArrowDirection`. The design intent is that both buttons come from the same source shape rather than two separately tuned point sets.
-- Keep using `SpriteBatch.Draw(...)` with `TextureAssets.MagicPixel` for the background, border, and line segments so the control remains texture-free and consistent with the current UI rendering approach.
-- Normalize or pixel-snap the chevron line endpoints before drawing so both arrow strokes land on the same pixel grid. The spec specifically aims to avoid side-specific distortion caused by separate integer truncation or rotation differences in the current line-drawing path.
-- Leave [Common/UI/RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) responsible for pagination placement and button state management. Only make layout adjustments there if the shared chevron rendering requires a small centering correction.
-- No changes are expected in recipe analysis, item scanning, localization, or NPC interaction systems.
+- Modify [Common/UI/RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) to stop constructing filter labels from raw localization lookups without fallback. Introduce a filter-label resolution path parallel to the existing search placeholder fallback handling so category text is safe even when localization data is missing or malformed.
+- Extend the `FilterDefinitions` metadata in [Common/UI/RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) so each category carries both its localization key and its fallback display string. Keep `SetFilter`, `UpdateFilterSelectionStates`, and `ApplyFilter` behavior unchanged.
+- Update [Common/UI/UIFilterOption.cs](/Users/sy/projects/steroid-guide/Common/UI/UIFilterOption.cs) as the primary rendering surface for row-level polish. This class already owns the indicator, row background, and border drawing in `DrawSelf`, so it should absorb the style refresh rather than pushing presentational logic into the parent UI state.
+- Adjust the sidebar container styling in [Common/UI/RecipeAnalyzerUIState.cs](/Users/sy/projects/steroid-guide/Common/UI/RecipeAnalyzerUIState.cs) where the filter `UIPanel` is created. The spec expects the container background, padding, and optional border treatment to be retuned so it visually supports the child rows instead of competing with them.
+- Preserve the current Terraria UI framework structure: `UIState.OnInitialize` builds the sidebar, `UIElement.OnLeftClick` handles row interaction, and rendering continues through `SpriteBatch` plus `TextureAssets.MagicPixel`-based primitives where custom drawing is needed.
+- Keep localization data in [Localization/en-US_Mods.SteroidGuide.hjson](/Users/sy/projects/steroid-guide/Localization/en-US_Mods.SteroidGuide.hjson) authoritative for normal display text. The fallback path is a runtime safety net, not a replacement for valid entries.
+- No changes are expected in [Common/ItemCategoryClassifier.cs](/Users/sy/projects/steroid-guide/Common/ItemCategoryClassifier.cs), recipe graph construction, inventory scanning, NPC dialogue, or worldgen systems.
 
 ## UI/UX
-- The pagination row keeps its current placement beneath the item grid.
-- Players should perceive the arrows as a matched pair of mirrored chevrons, with no special casing visible on the left side.
-- Hover and disabled styling should remain unchanged apart from the left-arrow artifact disappearing.
+- The left sidebar should still feel compact and information-dense, but the filter group should read as one composed control instead of a bordered box containing another set of bordered boxes.
+- Selected rows should continue using the indicator plus row styling as the primary affordance.
+- Hover feedback should remain subtle but obvious enough for mouse-driven use.
+- Label text should be stable, readable, and aligned consistently across all filter rows.
 
 ## Success Criteria
-- [ ] In game, the left pagination arrow no longer appears broken or clipped.
-- [ ] The left and right arrows appear visually mirrored in normal, hover, and disabled states.
-- [ ] Pagination still moves backward/forward correctly and preserves the current button hitboxes and layout.
-- [ ] No new textures, hardcoded gameplay data, or unrelated UI regressions are introduced.
+- [ ] Opening the analyzer never shows raw filter localization keys; each category displays readable text.
+- [ ] If a filter localization entry is missing or invalid, the sidebar shows a short fallback label rather than the unresolved key.
+- [ ] The left filter container and its buttons appear visually cohesive, with the current awkward border relationship removed.
+- [ ] Filter selection, hover feedback, row click targets, and sort/filter functionality continue to work as before.
 
 ## Out of Scope
-- Redesigning the pagination row, page label text, or overall analyzer layout.
-- Changing filtering, sorting, search, recipe-tree behavior, or analysis logic.
-- Reworking the general button color palette or replacing runtime-drawn controls with art assets.
+- Reordering filter categories or changing category classification logic.
+- Redesigning the main panel, item grid, pagination controls, search box, or recipe tree.
+- Adding new filters, new localization locales, or broader theme changes across the whole analyzer UI.
