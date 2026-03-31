@@ -14,6 +14,9 @@ namespace SteroidGuide.Common.UI
 
     public class UIPaginationArrowButton : UIElement
     {
+        private static readonly int[] ArrowProfile = [1, 3, 5, 7, 9, 7, 5, 3, 1];
+        private static readonly int ArrowWidth = GetArrowWidth();
+
         private readonly PaginationArrowDirection _direction;
 
         public bool IsEnabled { get; set; } = true;
@@ -46,28 +49,33 @@ namespace SteroidGuide.Common.UI
 
         private void DrawArrow(SpriteBatch spriteBatch, Rectangle bounds, Color color)
         {
-            Vector2 center = new(bounds.X + bounds.Width * 0.5f, bounds.Y + bounds.Height * 0.5f);
-            float arrowHalfWidth = MathF.Max(5f, bounds.Width * 0.18f);
-            float arrowHalfHeight = MathF.Max(5f, bounds.Height * 0.24f);
-            float thickness = 3f;
-            float directionSign = _direction == PaginationArrowDirection.Left ? -1f : 1f;
+            Rectangle innerBounds = bounds;
+            innerBounds.Inflate(-5, -4);
+            int glyphHeight = ArrowProfile.Length;
+            int glyphX = innerBounds.X + (innerBounds.Width - ArrowWidth) / 2;
+            int glyphY = innerBounds.Y + (innerBounds.Height - glyphHeight) / 2;
 
-            Vector2[] chevronPoints =
-            [
-                new(-arrowHalfWidth, -arrowHalfHeight),
-                new(arrowHalfWidth, 0f),
-                new(-arrowHalfWidth, arrowHalfHeight)
-            ];
-
-            for (int i = 0; i < chevronPoints.Length; i++)
+            // A stepped, axis-aligned triangle stays readable under UI scaling and mirrors cleanly per direction.
+            for (int row = 0; row < ArrowProfile.Length; row++)
             {
-                Vector2 point = chevronPoints[i];
-                point.X *= directionSign;
-                chevronPoints[i] = PixelSnap(center + point);
+                int rowWidth = ArrowProfile[row];
+                int rowX = _direction == PaginationArrowDirection.Left
+                    ? glyphX + ArrowWidth - rowWidth
+                    : glyphX;
+
+                DrawRect(spriteBatch, new Rectangle(rowX, glyphY + row, rowWidth, 1), color);
+            }
+        }
+
+        private static int GetArrowWidth()
+        {
+            int width = 0;
+            foreach (int rowWidth in ArrowProfile)
+            {
+                width = Math.Max(width, rowWidth);
             }
 
-            DrawLine(spriteBatch, chevronPoints[0], chevronPoints[1], color, thickness);
-            DrawLine(spriteBatch, chevronPoints[1], chevronPoints[2], color, thickness);
+            return width;
         }
 
         private static void DrawRect(SpriteBatch spriteBatch, Rectangle rectangle, Color color)
@@ -83,30 +91,5 @@ namespace SteroidGuide.Common.UI
             DrawRect(spriteBatch, new Rectangle(rectangle.Right - thickness, rectangle.Y, thickness, rectangle.Height), color);
         }
 
-        private static void DrawLine(SpriteBatch spriteBatch, Vector2 start, Vector2 end, Color color, float thickness)
-        {
-            Vector2 edge = end - start;
-            if (edge.LengthSquared() <= 0f)
-            {
-                return;
-            }
-
-            float angle = MathF.Atan2(edge.Y, edge.X);
-            spriteBatch.Draw(
-                TextureAssets.MagicPixel.Value,
-                start,
-                null,
-                color,
-                angle,
-                new Vector2(0f, 0.5f),
-                new Vector2(edge.Length(), thickness),
-                SpriteEffects.None,
-                0f);
-        }
-
-        private static Vector2 PixelSnap(Vector2 point)
-        {
-            return new Vector2(MathF.Round(point.X), MathF.Round(point.Y));
-        }
     }
 }
