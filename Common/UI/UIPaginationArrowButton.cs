@@ -15,6 +15,7 @@ namespace SteroidGuide.Common.UI
     public class UIPaginationArrowButton : UIElement
     {
         private static readonly int[] ArrowProfile = [1, 3, 5, 7, 9, 7, 5, 3, 1];
+        private static readonly int ArrowWidth = GetArrowWidth();
 
         private readonly PaginationArrowDirection _direction;
 
@@ -50,9 +51,8 @@ namespace SteroidGuide.Common.UI
         {
             Rectangle innerBounds = bounds;
             innerBounds.Inflate(-5, -4);
-            int glyphWidth = ArrowProfile[ArrowProfile.Length - 1];
             int glyphHeight = ArrowProfile.Length;
-            int glyphX = innerBounds.X + (innerBounds.Width - glyphWidth) / 2;
+            int glyphX = innerBounds.X + (innerBounds.Width - ArrowWidth) / 2;
             int glyphY = innerBounds.Y + (innerBounds.Height - glyphHeight) / 2;
 
             // A stepped, axis-aligned triangle stays readable under UI scaling and mirrors cleanly per direction.
@@ -60,11 +60,22 @@ namespace SteroidGuide.Common.UI
             {
                 int rowWidth = ArrowProfile[row];
                 int rowX = _direction == PaginationArrowDirection.Left
-                    ? glyphX + glyphWidth - rowWidth
+                    ? glyphX + ArrowWidth - rowWidth
                     : glyphX;
 
                 DrawRect(spriteBatch, new Rectangle(rowX, glyphY + row, rowWidth, 1), color);
             }
+        }
+
+        private static int GetArrowWidth()
+        {
+            int width = 0;
+            foreach (int rowWidth in ArrowProfile)
+            {
+                width = Math.Max(width, rowWidth);
+            }
+
+            return width;
         }
 
         private static void DrawRect(SpriteBatch spriteBatch, Rectangle rectangle, Color color)
