@@ -103,13 +103,9 @@ namespace SteroidGuide.Common.UI
             _mainPanel.VAlign = 0.5f;
             _mainPanel.SetPadding(12f);
 
-            // Close button [X]
-            var closeButton = new UITextPanel<string>("X", 0.8f, false);
-            closeButton.Width.Set(30f, 0f);
-            closeButton.Height.Set(30f, 0f);
+            var closeButton = new UICloseButton();
             closeButton.Top.Set(2f, 0f);
-            closeButton.Left.Set(-30f, 1f);
-            closeButton.SetPadding(4f);
+            closeButton.Left.Set(-34f, 1f);
             closeButton.OnLeftClick += (evt, el) =>
             {
                 ModContent.GetInstance<RecipeAnalyzerUISystem>()?.HideUI();
