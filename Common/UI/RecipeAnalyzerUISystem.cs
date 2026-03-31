@@ -63,6 +63,7 @@ namespace SteroidGuide.Common.UI
                 return;
 
             AnalyzerInterface?.Update(gameTime);
+            AnalyzerState?.UpdateSearchTextInput();
 
             // ESC to close
             bool escDown = Main.keyState.IsKeyDown(Keys.Escape);

@@ -27,8 +27,6 @@ namespace SteroidGuide.Common.UI
         private const string NearbyChestStatusPluralFallback = "Referencing {0} nearby chests";
         private const string SearchPlaceholderKey = "Mods.SteroidGuide.UI.SearchPlaceholder";
         private const string SearchPlaceholderFallback = "Search craftable items...";
-        private const string SearchClearKey = "Mods.SteroidGuide.UI.SearchClear";
-        private const string SearchClearFallback = "Clear";
 
         private static readonly (FilterCategory Category, string LabelKey, string FallbackLabel)[] FilterDefinitions =
         [
@@ -177,8 +175,7 @@ namespace SteroidGuide.Common.UI
 
             // ── Search box ──
             _searchTextBox = new UISearchTextBox(
-                ResolveLocalizedText(SearchPlaceholderKey, SearchPlaceholderFallback),
-                ResolveLocalizedText(SearchClearKey, SearchClearFallback));
+                ResolveLocalizedText(SearchPlaceholderKey, SearchPlaceholderFallback));
             _searchTextBox.Top.Set(42f, 0f);
             _searchTextBox.Left.Set(132f, 0f);
             _searchTextBox.Width.Set(650f, 0f);
@@ -509,6 +506,11 @@ namespace SteroidGuide.Common.UI
         public bool HandleEscapeKey()
         {
             return _searchTextBox?.HandleEscape() ?? false;
+        }
+
+        public void UpdateSearchTextInput()
+        {
+            _searchTextBox?.UpdateFocusedTextInput();
         }
 
         private void OnSearchTextChanged(string query)

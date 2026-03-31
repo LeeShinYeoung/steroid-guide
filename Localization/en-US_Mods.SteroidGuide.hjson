@@ -23,7 +23,6 @@ UI: {
 	NearbyChestStatusSingular: Referencing {0} nearby chest
 	NearbyChestStatusPlural: Referencing {0} nearby chests
 	SearchPlaceholder: Search craftable items...
-	SearchClear: Clear
 	SearchNoResults: No craftable items match the current query.
 	NoCraftableItems: No craftable items found.
 	NoItemsInCategory: No craftable items match the selected category.
