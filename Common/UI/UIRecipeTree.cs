@@ -17,6 +17,7 @@ namespace SteroidGuide.Common.UI
     {
         private const string StationLabelKey = "Mods.SteroidGuide.UI.RecipeTree.StationLabel";
         private const string EmptyStateText = "Click an item above to view its recipe tree.";
+        private const string AlternativeRecipeText = "Alternative Recipe";
         private UIList _list;
         private UIScrollbar _scrollbar;
         private UIEmptyStatePlaceholder _placeholder;
@@ -99,7 +100,7 @@ namespace SteroidGuide.Common.UI
             if (HasAlternativeRecipes(root))
             {
                 var capturedRoot = root;
-                AddTreeTextLine("Alternative Recipe \u25B6", new Color(150, 200, 255), 0.7f,
+                AddAlternativeActionLine(AlternativeRecipeText, new Color(150, 200, 255), 0.7f,
                     0, emptyParentLines, () => SwapAlternativeRecipe(capturedRoot));
             }
         }
@@ -164,7 +165,7 @@ namespace SteroidGuide.Common.UI
                     if (HasAlternativeRecipes(child))
                     {
                         var capturedChild = child;
-                        AddTreeTextLine("Alternative Recipe \u25B6", new Color(150, 200, 255), 0.65f,
+                        AddAlternativeActionLine(AlternativeRecipeText, new Color(150, 200, 255), 0.65f,
                             depth + 1, childParentLines, () => SwapAlternativeRecipe(capturedChild));
                     }
                 }
@@ -378,6 +379,15 @@ namespace SteroidGuide.Common.UI
             line.Height.Set(20f, 0f);
             if (onClick != null)
                 line.OnLeftClick += (evt, el) => onClick();
+            _list.Add(line);
+        }
+
+        private void AddAlternativeActionLine(string text, Color color, float scale, int depth, List<bool> parentLines, Action onClick)
+        {
+            var line = new UITreeActionLine(text, color, scale, depth, parentLines);
+            line.Width.Set(0f, 1f);
+            line.Height.Set(24f, 0f);
+            line.OnLeftClick += (evt, el) => onClick();
             _list.Add(line);
         }
 
@@ -851,6 +861,128 @@ namespace SteroidGuide.Common.UI
                 // Content starts after tree area
                 float contentX = x + (_depth + 1) * DepthIndent;
                 Utils.DrawBorderString(spriteBatch, _text, new Vector2(contentX, centerY - 8f), _color, _scale);
+            }
+        }
+
+        private class UITreeActionLine : UIElement
+        {
+            private const float HorizontalPadding = 8f;
+            private const float VerticalPadding = 3f;
+            private const float ArrowWidth = 10f;
+            private const float ArrowHeight = 8f;
+            private const float ArrowSpacing = 8f;
+
+            private static readonly Color BackgroundColor = new(48, 72, 108, 205);
+            private static readonly Color BorderColor = new(112, 158, 212, 225);
+            private static readonly Color HoverBackgroundColor = new(66, 96, 138, 225);
+            private static readonly Color HoverBorderColor = new(182, 212, 248, 235);
+
+            private readonly string _text;
+            private readonly Color _color;
+            private readonly float _scale;
+            private readonly int _depth;
+            private readonly List<bool> _parentLines;
+
+            public UITreeActionLine(string text, Color color, float scale, int depth, List<bool> parentLines)
+            {
+                _text = text;
+                _color = color;
+                _scale = scale;
+                _depth = depth;
+                _parentLines = parentLines != null ? new List<bool>(parentLines) : null;
+            }
+
+            protected override void DrawSelf(SpriteBatch spriteBatch)
+            {
+                var dims = GetDimensions();
+                float x = dims.X;
+                float y = dims.Y;
+                float centerY = y + dims.Height / 2f;
+
+                DrawAncestorLines(spriteBatch, x, y, dims.Height);
+
+                float contentX = x + (_depth + 1) * DepthIndent;
+                Vector2 textSize = FontAssets.MouseText.Value.MeasureString(_text) * _scale;
+                float buttonWidth = textSize.X + HorizontalPadding * 2f + ArrowSpacing + ArrowWidth;
+                float buttonHeight = textSize.Y + VerticalPadding * 2f + 2f;
+                Rectangle buttonRect = new(
+                    (int)contentX,
+                    (int)(centerY - buttonHeight / 2f),
+                    (int)Math.Ceiling(buttonWidth),
+                    (int)Math.Ceiling(buttonHeight));
+
+                Color backgroundColor = IsMouseHovering ? HoverBackgroundColor : BackgroundColor;
+                Color borderColor = IsMouseHovering ? HoverBorderColor : BorderColor;
+                DrawFramedBox(spriteBatch, buttonRect, backgroundColor, borderColor);
+
+                Vector2 textPosition = new(
+                    buttonRect.X + HorizontalPadding,
+                    centerY - textSize.Y / 2f - 1f);
+                Utils.DrawBorderString(spriteBatch, _text, textPosition, _color, _scale);
+
+                Vector2 arrowCenter = new(
+                    buttonRect.Right - HorizontalPadding - ArrowWidth / 2f,
+                    centerY);
+                DrawChevron(spriteBatch, arrowCenter, _color);
+            }
+
+            private void DrawAncestorLines(SpriteBatch spriteBatch, float x, float y, float height)
+            {
+                if (_parentLines == null)
+                    return;
+
+                var pixel = TextureAssets.MagicPixel.Value;
+                for (int d = 0; d < _parentLines.Count; d++)
+                {
+                    if (_parentLines[d])
+                    {
+                        float lineX = x + d * DepthIndent + DepthIndent / 2f;
+                        spriteBatch.Draw(pixel,
+                            new Rectangle((int)(lineX - LineThickness / 2f), (int)y,
+                                LineThickness, (int)height),
+                            LineColor);
+                    }
+                }
+            }
+
+            private static void DrawChevron(SpriteBatch spriteBatch, Vector2 center, Color color)
+            {
+                Vector2 leftTop = new(center.X - ArrowWidth / 2f, center.Y - ArrowHeight / 2f);
+                Vector2 right = new(center.X + ArrowWidth / 2f, center.Y);
+                Vector2 leftBottom = new(center.X - ArrowWidth / 2f, center.Y + ArrowHeight / 2f);
+
+                DrawLine(spriteBatch, leftTop, right, color, 2f);
+                DrawLine(spriteBatch, right, leftBottom, color, 2f);
+            }
+
+            private static void DrawLine(SpriteBatch spriteBatch, Vector2 start, Vector2 end, Color color, float thickness)
+            {
+                Vector2 edge = end - start;
+                if (edge.LengthSquared() <= 0f)
+                    return;
+
+                float angle = MathF.Atan2(edge.Y, edge.X);
+                spriteBatch.Draw(
+                    TextureAssets.MagicPixel.Value,
+                    start,
+                    null,
+                    color,
+                    angle,
+                    new Vector2(0f, 0.5f),
+                    new Vector2(edge.Length(), thickness),
+                    SpriteEffects.None,
+                    0f);
+            }
+
+            private static void DrawFramedBox(SpriteBatch spriteBatch, Rectangle rect, Color backgroundColor, Color borderColor)
+            {
+                Texture2D pixel = TextureAssets.MagicPixel.Value;
+                spriteBatch.Draw(pixel, rect, backgroundColor);
+
+                spriteBatch.Draw(pixel, new Rectangle(rect.X, rect.Y, rect.Width, 1), borderColor);
+                spriteBatch.Draw(pixel, new Rectangle(rect.X, rect.Bottom - 1, rect.Width, 1), borderColor);
+                spriteBatch.Draw(pixel, new Rectangle(rect.X, rect.Y, 1, rect.Height), borderColor);
+                spriteBatch.Draw(pixel, new Rectangle(rect.Right - 1, rect.Y, 1, rect.Height), borderColor);
             }
         }
     }

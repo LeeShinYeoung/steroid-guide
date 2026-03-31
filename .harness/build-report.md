@@ -1,22 +1,20 @@
 # Build Report
 
 ## Implemented
-- [x] Made the search box capture text immediately on first click without opening Terraria chat by moving focused text input handling to a dedicated per-frame UI owner.
-- [x] Removed the search box's right-side `Clear` affordance and reclaimed the full input width while keeping existing filter, reset, and ESC-unfocus behavior.
+- [x] Kept nested recipe-tree nodes rendering their selected `UsedRecipe` details and `Alternative Recipe` action even after switching to a non-craftable alternative.
+- [x] Replaced the recipe-tree `Alternative Recipe` text-glyph affordance with a dedicated graphical action row so root and nested toggles present as UI controls instead of clickable text characters.
 
 ## Files Changed
-- `Common/UI/UISearchTextBox.cs` — removed the embedded clear-button code, kept focus ownership inside the control, and exposed focused text capture as an explicit per-frame step.
-- `Common/UI/RecipeAnalyzerUISystem.cs` — runs the search box's focused text-input update after UI click processing so first-click typing works with chat closed.
-- `Common/UI/RecipeAnalyzerUIState.cs` — instantiates the simplified search box and forwards the per-frame search input update.
-- `Localization/en-US_Mods.SteroidGuide.hjson` — removed the unused `UI.SearchClear` localization entry.
+- `Common/UI/UIRecipeTree.cs` — kept persistent nested alternative-recipe behavior in place and converted the root/child `Alternative Recipe` rows into framed graphic action controls with a drawn chevron.
 
 ## How to Test
 1. Build with tModLoader.
-2. Open the Steroid Guide analyzer UI in-game and click inside the search field once while vanilla chat is closed.
-3. Type immediately and verify the first typed character appears in the field and filters the item grid right away.
-4. Press `ESC` once while the search field is focused and verify the field loses focus without closing the analyzer UI.
-5. Focus the search field again, click outside it, and verify typing no longer edits the query until the field is clicked again.
-6. Verify the search box no longer renders any right-side `Clear` text/button and that placeholder/typed text use the full field width.
+2. Open the Steroid Guide analyzer UI in-game and select an item whose recipe tree contains a child node with multiple recipes.
+3. Verify the root and nested `Alternative Recipe` controls render as boxed action rows with a drawn arrow icon rather than a text `▶` glyph.
+4. Expand a child node, click `Alternative Recipe`, and verify the same child still shows its station/condition rows, ingredient subtree, and `Alternative Recipe` control afterward.
+5. Keep clicking the same child node's `Alternative Recipe` control and verify it rotates through the available recipes without the control disappearing.
+6. Switch to an alternative recipe path that is currently missing ingredients and verify the node stays visible with missing-status coloring while still allowing another recipe switch.
+7. Collapse and re-expand the child node and verify the triangle affordance still works based on whether the selected recipe has child ingredients to show.
 
 ## Known Issues
 - None.
