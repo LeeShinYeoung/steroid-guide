@@ -4,6 +4,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Terraria;
 using Terraria.GameContent;
+using Terraria.GameInput;
 using Terraria.UI;
 
 namespace SteroidGuide.Common.UI
@@ -18,6 +19,7 @@ namespace SteroidGuide.Common.UI
         private string _emptyStateText = "No craftable items found.";
 
         public event Action<int> OnItemSelected;
+        public event Action<int> OnPageScrollRequested;
 
         /// <summary>
         /// Dynamically computed column count based on the element's actual width.
@@ -81,6 +83,21 @@ namespace SteroidGuide.Common.UI
                 {
                     OnItemSelected?.Invoke(_items[index]);
                 }
+            }
+        }
+
+        public override void ScrollWheel(UIScrollWheelEvent evt)
+        {
+            if (!ContainsPoint(Main.MouseScreen))
+            {
+                base.ScrollWheel(evt);
+                return;
+            }
+
+            int scrollDelta = PlayerInput.ScrollWheelDeltaForUI;
+            if (scrollDelta != 0)
+            {
+                OnPageScrollRequested?.Invoke(scrollDelta);
             }
         }
 
