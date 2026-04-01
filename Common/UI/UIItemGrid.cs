@@ -11,46 +11,45 @@ namespace SteroidGuide.Common.UI
 {
     public class UIItemGrid : UIElement
     {
+        private readonly struct GridLayout
+        {
+            public GridLayout(float cellWidth, float cellHeight)
+            {
+                CellWidth = cellWidth;
+                CellHeight = cellHeight;
+            }
+
+            public float CellWidth { get; }
+            public float CellHeight { get; }
+        }
+
         private List<int> _items = new();
         private int _selectedItemId = -1;
-        private const float CellWidth = 48f;
-        private const float CellHeight = 60f;
+        private const int TargetColumns = 12;
+        private const int TargetRows = 3;
+        private const float BaseCellWidth = 48f;
+        private const float BaseCellHeight = 60f;
         private const float CellPadding = 6f;
+        private const float CellAspectRatio = BaseCellHeight / BaseCellWidth;
+        private const float IconCenterYRatio = 20f / BaseCellHeight;
+        private const float NameTopRatio = 38f / BaseCellHeight;
         private string _emptyStateText = "No craftable items found.";
 
         public event Action<int> OnItemSelected;
         public event Action<int> OnPageScrollRequested;
 
-        /// <summary>
-        /// Dynamically computed column count based on the element's actual width.
-        /// </summary>
-        public int Columns
-        {
-            get
-            {
-                float availableWidth = GetDimensions().Width;
-                if (availableWidth <= 0f)
-                    return 1;
-                // First cell needs CellWidth, each additional cell needs CellWidth + CellPadding
-                int cols = Math.Max(1, (int)((availableWidth + CellPadding) / (CellWidth + CellPadding)));
-                return cols;
-            }
-        }
+        public int Columns => TargetColumns;
 
-        public int Rows
-        {
-            get
-            {
-                float availableHeight = GetDimensions().Height;
-                if (availableHeight <= 0f)
-                    return 1;
-
-                int rows = Math.Max(1, (int)((availableHeight + CellPadding) / (CellHeight + CellPadding)));
-                return rows;
-            }
-        }
+        public int Rows => TargetRows;
 
         public int ItemsPerPage => Columns * Rows;
+
+        public static float GetPreferredHeight(float availableWidth)
+        {
+            float cellWidth = GetCellWidth(availableWidth);
+            float cellHeight = cellWidth * CellAspectRatio;
+            return TargetRows * cellHeight + (TargetRows - 1) * CellPadding;
+        }
 
         public void SetItems(List<int> items, int selectedId)
         {
@@ -67,22 +66,9 @@ namespace SteroidGuide.Common.UI
         {
             base.LeftClick(evt);
 
-            var dims = GetDimensions();
-            float relX = evt.MousePosition.X - dims.X;
-            float relY = evt.MousePosition.Y - dims.Y;
-
-            int col = (int)(relX / (CellWidth + CellPadding));
-            int row = (int)(relY / (CellHeight + CellPadding));
-
-            int columns = Columns;
-            int rows = Rows;
-            if (col >= 0 && col < columns && row >= 0 && row < rows)
+            if (TryGetItemIndexAtPosition(evt.MousePosition, out int index))
             {
-                int index = row * columns + col;
-                if (index < _items.Count)
-                {
-                    OnItemSelected?.Invoke(_items[index]);
-                }
+                OnItemSelected?.Invoke(_items[index]);
             }
         }
 
@@ -106,17 +92,13 @@ namespace SteroidGuide.Common.UI
             var dims = GetDimensions();
             float startX = dims.X;
             float startY = dims.Y;
+            GridLayout layout = GetLayout(dims);
 
-            int columns = Columns;
-            int rows = Rows;
-            for (int i = 0; i < _items.Count && i < columns * rows; i++)
+            for (int i = 0; i < _items.Count && i < ItemsPerPage; i++)
             {
-                int row = i / columns;
-                int col = i % columns;
-
-                float x = startX + col * (CellWidth + CellPadding);
-                float y = startY + row * (CellHeight + CellPadding);
-                var cellRect = new Rectangle((int)x, (int)y, (int)CellWidth, (int)CellHeight);
+                int row = i / Columns;
+                int col = i % Columns;
+                Rectangle cellRect = GetCellRectangle(startX, startY, layout, col, row);
 
                 int itemId = _items[i];
 
@@ -134,11 +116,12 @@ namespace SteroidGuide.Common.UI
                 }
 
                 // Draw item icon (centered horizontally, shifted up to leave room for name)
-                float iconCenterY = y + 20f;
-                DrawItemIcon(spriteBatch, itemId, new Vector2(x + CellWidth / 2f, iconCenterY));
+                float iconCenterY = cellRect.Y + cellRect.Height * IconCenterYRatio;
+                DrawItemIcon(spriteBatch, itemId, new Vector2(cellRect.X + cellRect.Width * 0.5f, iconCenterY));
 
                 // Draw item name below icon
-                DrawItemName(spriteBatch, itemId, x, y + 38f, CellWidth);
+                float nameY = cellRect.Y + cellRect.Height * NameTopRatio;
+                DrawItemName(spriteBatch, itemId, cellRect.X, nameY, cellRect.Width);
 
                 // Hover: tooltip + highlight
                 if (cellRect.Contains(Main.mouseX, Main.mouseY))
@@ -168,9 +151,56 @@ namespace SteroidGuide.Common.UI
             // Empty state
             if (_items.Count == 0)
             {
+                Vector2 emptyStateSize = FontAssets.MouseText.Value.MeasureString(_emptyStateText);
+                float emptyStateX = startX + (dims.Width - emptyStateSize.X) * 0.5f;
                 Utils.DrawBorderString(spriteBatch, _emptyStateText,
-                    new Vector2(startX + 20f, startY + 80f), Color.Gray);
+                    new Vector2(emptyStateX, startY + 80f), Color.Gray);
             }
+        }
+
+        private bool TryGetItemIndexAtPosition(Vector2 mousePosition, out int index)
+        {
+            var dims = GetDimensions();
+            GridLayout layout = GetLayout(dims);
+
+            for (int i = 0; i < _items.Count && i < ItemsPerPage; i++)
+            {
+                int row = i / Columns;
+                int col = i % Columns;
+                Rectangle cellRect = GetCellRectangle(dims.X, dims.Y, layout, col, row);
+                if (cellRect.Contains(mousePosition.ToPoint()))
+                {
+                    index = i;
+                    return true;
+                }
+            }
+
+            index = -1;
+            return false;
+        }
+
+        private static GridLayout GetLayout(CalculatedStyle dims)
+        {
+            float cellWidth = GetCellWidth(dims.Width);
+            return new GridLayout(cellWidth, cellWidth * CellAspectRatio);
+        }
+
+        private static float GetCellWidth(float availableWidth)
+        {
+            float clampedWidth = Math.Max(1f, availableWidth);
+            float paddingWidth = (TargetColumns - 1) * CellPadding;
+            return Math.Max(1f, (clampedWidth - paddingWidth) / TargetColumns);
+        }
+
+        private static Rectangle GetCellRectangle(float startX, float startY, GridLayout layout, int col, int row)
+        {
+            float x = startX + col * (layout.CellWidth + CellPadding);
+            float y = startY + row * (layout.CellHeight + CellPadding);
+            int left = (int)Math.Round(x);
+            int top = (int)Math.Round(y);
+            int right = (int)Math.Round(x + layout.CellWidth);
+            int bottom = (int)Math.Round(y + layout.CellHeight);
+            return new Rectangle(left, top, Math.Max(1, right - left), Math.Max(1, bottom - top));
         }
 
         private static void DrawItemName(SpriteBatch spriteBatch, int itemId, float x, float y, float maxWidth)

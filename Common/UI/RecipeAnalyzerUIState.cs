@@ -51,7 +51,7 @@ namespace SteroidGuide.Common.UI
         // Sort
         private SortCriteria _currentSort = SortCriteria.Rarity;
         private UISortButton _sortButton;
-        private UIPanel _sortDropdownPanel;
+        private UIElement _sortDropdownPanel;
         private readonly Dictionary<SortCriteria, UISortOption> _sortOptions = new();
         private bool _sortDropdownOpen;
 
@@ -64,7 +64,7 @@ namespace SteroidGuide.Common.UI
         private UIElement _paginationRow;
         private UIPaginationArrowButton _previousPageButton;
         private UIPaginationArrowButton _nextPageButton;
-        private UIText _pageText;
+        private UICenteredText _pageText;
 
         // Recipe tree
         private UIRecipeTree _recipeTree;
@@ -79,27 +79,47 @@ namespace SteroidGuide.Common.UI
         private int _selectedItemId = -1;
         private int _updateCounter;
         private int ItemsPerPage => _itemGrid?.ItemsPerPage ?? 20;
+        private const float MainPanelWidth = 820f;
+        private const float MainPanelHeight = 600f;
+        private const float MainPanelPadding = 12f;
         private const float PaginationArrowWidth = 30f;
         private const float PaginationTextGap = 18f;
         private const float PaginationTextScale = 0.75f;
         private const float FilterPanelTop = 42f;
-        private const float FilterOptionStep = 26f;
-        private const float FilterPanelPadding = 6f;
+        private const float SidebarRowHeight = 28f;
+        private const float FilterOptionGap = 2f;
+        private const float FilterOptionStep = SidebarRowHeight + FilterOptionGap;
+        private const float SortOptionStep = SidebarRowHeight;
         private const float SidebarPanelWidth = 120f;
+        private const float ContentColumnGap = 12f;
+        private const float ContentColumnLeft = SidebarPanelWidth + ContentColumnGap;
+        private const float ContentColumnWidth = MainPanelWidth - MainPanelPadding * 2f - ContentColumnLeft;
+        private const float SearchBoxTop = 42f;
+        private const float SearchBoxHeight = 32f;
+        private const float ItemGridTop = 80f;
+        private const float RecipeTreeTop = 346f;
+        private const float RecipeTreeHeight = 228f;
 
         private static readonly Color SidebarPanelBackgroundColor = new(20, 26, 44, 175);
         private static readonly Color SidebarPanelBorderColor = new(94, 108, 154, 120);
         private static readonly Color SidebarControlBackgroundColor = new(33, 42, 73, 215);
         private static readonly Color SidebarControlBorderColor = new(118, 136, 195, 185);
 
+        public bool IsSearchFocused => _searchTextBox?.IsFocused ?? false;
+        public bool IsMouseOverMainPanel => _mainPanel?.ContainsPoint(Main.MouseScreen) ?? false;
+
         public override void OnInitialize()
         {
+            float itemGridHeight = UIItemGrid.GetPreferredHeight(ContentColumnWidth);
+            float footerControlsTop = GetFooterControlsTop(itemGridHeight);
+            float filterPanelHeight = FilterDefinitions.Length * FilterOptionStep - FilterOptionGap;
+            float sortButtonTop = GetSidebarSortButtonTop(filterPanelHeight);
             _mainPanel = new UIPanel();
-            _mainPanel.Width.Set(820f, 0f);
-            _mainPanel.Height.Set(600f, 0f);
+            _mainPanel.Width.Set(MainPanelWidth, 0f);
+            _mainPanel.Height.Set(MainPanelHeight, 0f);
             _mainPanel.HAlign = 0.5f;
             _mainPanel.VAlign = 0.5f;
-            _mainPanel.SetPadding(12f);
+            _mainPanel.SetPadding(MainPanelPadding);
 
             var closeButton = new UICloseButton();
             closeButton.Top.Set(2f, 0f);
@@ -116,14 +136,14 @@ namespace SteroidGuide.Common.UI
             _mainPanel.Append(_nearbyChestStatusText);
 
             // ── Filter sidebar ──
-            var filterPanel = new UIPanel();
+            int sortOptionCount = Enum.GetValues(typeof(SortCriteria)).Length;
+            float sortDropdownHeight = sortOptionCount * SortOptionStep;
+
+            var filterPanel = new UIElement();
             filterPanel.Top.Set(FilterPanelTop, 0f);
             filterPanel.Left.Set(0f, 0f);
             filterPanel.Width.Set(SidebarPanelWidth, 0f);
-            filterPanel.Height.Set(FilterDefinitions.Length * FilterOptionStep + FilterPanelPadding, 0f);
-            filterPanel.SetPadding(FilterPanelPadding);
-            filterPanel.BackgroundColor = SidebarPanelBackgroundColor;
-            filterPanel.BorderColor = SidebarPanelBorderColor;
+            filterPanel.Height.Set(filterPanelHeight, 0f);
             _mainPanel.Append(filterPanel);
 
             float filterY = 0f;
@@ -141,22 +161,19 @@ namespace SteroidGuide.Common.UI
 
             // ── Sort dropdown (below filter sidebar) ──
             _sortButton = new UISortButton();
-            _sortButton.Top.Set(FilterPanelTop + FilterDefinitions.Length * FilterOptionStep + 12f, 0f);
+            _sortButton.Top.Set(sortButtonTop, 0f);
             _sortButton.Left.Set(0f, 0f);
             _sortButton.Width.Set(SidebarPanelWidth, 0f);
-            _sortButton.Height.Set(28f, 0f);
+            _sortButton.Height.Set(SidebarRowHeight, 0f);
             _sortButton.OnLeftClick += (evt, el) => ToggleSortDropdown();
             _sortButton.SetState(GetSortLabel(_currentSort), _sortDropdownOpen);
             _mainPanel.Append(_sortButton);
 
-            _sortDropdownPanel = new UIPanel();
-            _sortDropdownPanel.Top.Set(FilterPanelTop + FilterDefinitions.Length * FilterOptionStep + 40f, 0f);
+            _sortDropdownPanel = new UIElement();
+            _sortDropdownPanel.Top.Set(sortButtonTop + SidebarRowHeight, 0f);
             _sortDropdownPanel.Left.Set(0f, 0f);
             _sortDropdownPanel.Width.Set(SidebarPanelWidth, 0f);
-            _sortDropdownPanel.Height.Set(112f, 0f);
-            _sortDropdownPanel.SetPadding(6f);
-            _sortDropdownPanel.BackgroundColor = SidebarPanelBackgroundColor;
-            _sortDropdownPanel.BorderColor = SidebarPanelBorderColor;
+            _sortDropdownPanel.Height.Set(sortDropdownHeight, 0f);
 
             float sortY = 0f;
             foreach (SortCriteria sort in Enum.GetValues(typeof(SortCriteria)))
@@ -168,7 +185,7 @@ namespace SteroidGuide.Common.UI
                 option.SetSelected(sort == _currentSort);
                 _sortDropdownPanel.Append(option);
                 _sortOptions[sort] = option;
-                sortY += 24f;
+                sortY += SortOptionStep;
             }
             // Start hidden
             // _sortDropdownPanel is only appended when dropdown is open
@@ -176,46 +193,45 @@ namespace SteroidGuide.Common.UI
             // ── Search box ──
             _searchTextBox = new UISearchTextBox(
                 ResolveLocalizedText(SearchPlaceholderKey, SearchPlaceholderFallback));
-            _searchTextBox.Top.Set(42f, 0f);
-            _searchTextBox.Left.Set(132f, 0f);
-            _searchTextBox.Width.Set(650f, 0f);
-            _searchTextBox.Height.Set(32f, 0f);
+            _searchTextBox.Top.Set(SearchBoxTop, 0f);
+            _searchTextBox.Left.Set(ContentColumnLeft, 0f);
+            _searchTextBox.Width.Set(ContentColumnWidth, 0f);
+            _searchTextBox.Height.Set(SearchBoxHeight, 0f);
             _searchTextBox.OnTextChanged += OnSearchTextChanged;
             _mainPanel.Append(_searchTextBox);
 
             // ── Item grid ──
             _itemGrid = new UIItemGrid();
-            _itemGrid.Top.Set(80f, 0f);
-            _itemGrid.Left.Set(132f, 0f);
-            _itemGrid.Width.Set(650f, 0f);
-            _itemGrid.Height.Set(226f, 0f);
+            _itemGrid.Top.Set(ItemGridTop, 0f);
+            _itemGrid.Left.Set(ContentColumnLeft, 0f);
+            _itemGrid.Width.Set(ContentColumnWidth, 0f);
+            _itemGrid.Height.Set(itemGridHeight, 0f);
             _itemGrid.OnItemSelected += OnItemSelected;
             _itemGrid.OnPageScrollRequested += TryChangePageFromScroll;
             _mainPanel.Append(_itemGrid);
 
             // ── Pagination ──
             _paginationRow = new UIElement();
-            _paginationRow.Top.Set(312f, 0f);
-            _paginationRow.Left.Set(132f, 0f);
-            _paginationRow.Width.Set(650f, 0f);
-            _paginationRow.Height.Set(26f, 0f);
+            _paginationRow.Top.Set(footerControlsTop, 0f);
+            _paginationRow.Left.Set(ContentColumnLeft, 0f);
+            _paginationRow.Width.Set(ContentColumnWidth, 0f);
+            _paginationRow.Height.Set(SidebarRowHeight, 0f);
             _mainPanel.Append(_paginationRow);
 
             _previousPageButton = new UIPaginationArrowButton(PaginationArrowDirection.Left);
             _previousPageButton.Width.Set(PaginationArrowWidth, 0f);
-            _previousPageButton.Height.Set(24f, 0f);
-            _previousPageButton.Top.Set(1f, 0f);
+            _previousPageButton.Height.Set(SidebarRowHeight, 0f);
+            _previousPageButton.Top.Set(0f, 0f);
             _previousPageButton.OnLeftClick += (evt, el) => ChangePage(-1);
             _paginationRow.Append(_previousPageButton);
 
-            _pageText = new UIText("Page 1/1", PaginationTextScale);
-            _pageText.Top.Set(3f, 0f);
+            _pageText = new UICenteredText("Page 1/1", PaginationTextScale);
             _paginationRow.Append(_pageText);
 
             _nextPageButton = new UIPaginationArrowButton(PaginationArrowDirection.Right);
             _nextPageButton.Width.Set(PaginationArrowWidth, 0f);
-            _nextPageButton.Height.Set(24f, 0f);
-            _nextPageButton.Top.Set(1f, 0f);
+            _nextPageButton.Height.Set(SidebarRowHeight, 0f);
+            _nextPageButton.Top.Set(0f, 0f);
             _nextPageButton.OnLeftClick += (evt, el) => ChangePage(1);
             _paginationRow.Append(_nextPageButton);
 
@@ -223,13 +239,27 @@ namespace SteroidGuide.Common.UI
 
             // ── Recipe tree (bottom half) ──
             _recipeTree = new UIRecipeTree();
-            _recipeTree.Top.Set(344f, 0f);
+            _recipeTree.Top.Set(RecipeTreeTop, 0f);
             _recipeTree.Left.Set(0f, 0f);
             _recipeTree.Width.Set(0f, 1f);
-            _recipeTree.Height.Set(230f, 0f);
+            _recipeTree.Height.Set(RecipeTreeHeight, 0f);
             _mainPanel.Append(_recipeTree);
 
             Append(_mainPanel);
+        }
+
+        private static float GetFooterControlsTop(float itemGridHeight)
+        {
+            float itemGridBottom = ItemGridTop + itemGridHeight;
+            float availableGap = RecipeTreeTop - itemGridBottom - SidebarRowHeight;
+            return itemGridBottom + availableGap * 0.5f;
+        }
+
+        private static float GetSidebarSortButtonTop(float filterPanelHeight)
+        {
+            float filterBottom = FilterPanelTop + filterPanelHeight;
+            float gapHeight = Math.Max(0f, RecipeTreeTop - filterBottom);
+            return filterBottom + Math.Max(0f, (gapHeight - SidebarRowHeight) * 0.5f);
         }
 
         public void OnShow()
@@ -265,7 +295,7 @@ namespace SteroidGuide.Common.UI
             }
 
             // Block world interaction when hovering our panel
-            if (_mainPanel.ContainsPoint(Main.MouseScreen))
+            if (IsMouseOverMainPanel)
             {
                 Main.LocalPlayer.mouseInterface = true;
             }
@@ -430,8 +460,7 @@ namespace SteroidGuide.Common.UI
 
             if (_paginationRow != null && _pageText != null)
             {
-                float textWidth = FontAssets.MouseText.Value.MeasureString(pageLabel).X * PaginationTextScale;
-                _pageText.Left.Set(-textWidth * 0.5f, 0.5f);
+                float textWidth = _pageText.MeasuredTextWidth;
                 _previousPageButton?.Left.Set(-(textWidth * 0.5f + PaginationTextGap + PaginationArrowWidth), 0.5f);
                 _nextPageButton?.Left.Set(textWidth * 0.5f + PaginationTextGap, 0.5f);
                 _paginationRow.Recalculate();
@@ -499,13 +528,23 @@ namespace SteroidGuide.Common.UI
                     RecipeGraphSystem.Graph,
                     _latestScanResult.Value.Items,
                     ignoreOwnedForCurrentNode: true);
-                _recipeTree?.SetTree(tree, RecipeGraphSystem.Graph, _latestScanResult.Value.Items);
+                _recipeTree?.SetTree(tree);
             }
         }
 
         public bool HandleEscapeKey()
         {
             return _searchTextBox?.HandleEscape() ?? false;
+        }
+
+        public bool HandleSearchEnterKey()
+        {
+            return _searchTextBox?.HandleEnter() ?? false;
+        }
+
+        public void ApplySearchTextInputCapture()
+        {
+            _searchTextBox?.ApplyFocusedInputCapture();
         }
 
         public void UpdateSearchTextInput()

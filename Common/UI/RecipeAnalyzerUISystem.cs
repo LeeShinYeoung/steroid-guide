@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Terraria;
 using Terraria.ID;
+using Terraria.GameInput;
 using Terraria.ModLoader;
 using Terraria.UI;
 
@@ -14,6 +15,7 @@ namespace SteroidGuide.Common.UI
         internal RecipeAnalyzerUIState AnalyzerState;
         private bool _isVisible;
         private bool _escWasDown;
+        private bool _enterWasDown;
         private int _talkingNpcIndex = -1;
 
         public bool IsVisible => _isVisible;
@@ -39,6 +41,8 @@ namespace SteroidGuide.Common.UI
         public void ShowUI(int npcIndex = -1)
         {
             _isVisible = true;
+            _escWasDown = false;
+            _enterWasDown = false;
             _talkingNpcIndex = npcIndex;
             AnalyzerInterface?.SetState(AnalyzerState);
             AnalyzerState?.OnShow();
@@ -47,8 +51,28 @@ namespace SteroidGuide.Common.UI
         public void HideUI()
         {
             _isVisible = false;
+            _escWasDown = false;
+            _enterWasDown = false;
             _talkingNpcIndex = -1;
             AnalyzerInterface?.SetState(null);
+        }
+
+        public override void PostUpdateInput()
+        {
+            if (!_isVisible || AnalyzerState == null)
+            {
+                return;
+            }
+
+            if (AnalyzerState.IsSearchFocused)
+            {
+                AnalyzerState.ApplySearchTextInputCapture();
+            }
+
+            if (AnalyzerState.IsMouseOverMainPanel && PlayerInput.ScrollWheelDeltaForUI != 0)
+            {
+                PlayerInput.LockVanillaMouseScroll("SteroidGuide.RecipeAnalyzer.Panel");
+            }
         }
 
         public void ToggleUI()
@@ -63,6 +87,15 @@ namespace SteroidGuide.Common.UI
                 return;
 
             AnalyzerInterface?.Update(gameTime);
+
+            bool enterDown = Main.keyState.IsKeyDown(Keys.Enter);
+            if (enterDown && !_enterWasDown && AnalyzerState?.HandleSearchEnterKey() == true)
+            {
+                _enterWasDown = true;
+                return;
+            }
+            _enterWasDown = enterDown;
+
             AnalyzerState?.UpdateSearchTextInput();
 
             // ESC to close

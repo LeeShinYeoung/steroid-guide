@@ -73,7 +73,7 @@ namespace SteroidGuide.Common.UI
             Vector2 labelSize = FontAssets.MouseText.Value.MeasureString(_label) * TextScale;
             Vector2 labelPosition = new(
                 bounds.X + LabelLeftPadding,
-                bounds.Y + (bounds.Height - labelSize.Y) * 0.5f - 1f);
+                bounds.Y + (bounds.Height - labelSize.Y) * 0.5f);
             Utils.DrawBorderString(spriteBatch, _label, labelPosition, textColor, TextScale);
         }
 

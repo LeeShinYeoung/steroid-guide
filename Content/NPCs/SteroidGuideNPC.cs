@@ -35,6 +35,13 @@ namespace SteroidGuide.Content.NPCs
                 includeDefault: true,
                 uniquePartyTexture: false);
 
+        public override void AutoStaticDefaults()
+        {
+            // Base AutoStaticDefaults calls ModContent.Request(Texture) which fails
+            // for vanilla asset paths. Reuse the already-loaded vanilla Guide texture.
+            TextureAssets.Npc[Type] = TextureAssets.Npc[VanillaGuideType];
+        }
+
         public override void SetStaticDefaults()
         {
             Main.npcFrameCount[Type] = Main.npcFrameCount[VanillaGuideType];

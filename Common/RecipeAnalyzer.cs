@@ -21,7 +21,6 @@ namespace SteroidGuide.Common
         public bool IgnoreOwnedForCraftability;
         public Recipe UsedRecipe;
         public List<RecipeTreeNode> Children = new();
-        public List<Recipe> AlternativeRecipes = new();
     }
 
     public class AnalysisResult
@@ -246,10 +245,6 @@ namespace SteroidGuide.Common
                         node.Children = children;
                         foundViable = true;
                     }
-                    else
-                    {
-                        node.AlternativeRecipes.Add(recipe);
-                    }
                 }
 
                 if (!foundViable && recipes.Count > 0)
@@ -269,8 +264,6 @@ namespace SteroidGuide.Common
                         int ingredientNeeded = ingredient.stack * batches;
                         node.Children.Add(BuildRecipeTree(ingredient.type, ingredientNeeded, graph, available, visiting));
                     }
-                    for (int i = 1; i < recipes.Count; i++)
-                        node.AlternativeRecipes.Add(recipes[i]);
                 }
             }
             else if (ownedCount < needed)

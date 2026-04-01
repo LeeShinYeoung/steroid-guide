@@ -1,4 +1,3 @@
-using System;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Terraria.GameContent;
@@ -8,10 +7,10 @@ namespace SteroidGuide.Common.UI
 {
     public class UICloseButton : UIElement
     {
+        private static readonly int[] IconDiagonalOffsets = [0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1, 0];
         private const int BorderThickness = 1;
         private const int InnerInset = 1;
-        private const float IconThickness = 3f;
-        private const float IconPadding = 9f;
+        private const int IconStrokeWidth = 2;
 
         public UICloseButton()
         {
@@ -48,16 +47,25 @@ namespace SteroidGuide.Common.UI
 
         private static void DrawCloseIcon(SpriteBatch spriteBatch, Rectangle bounds, Color color)
         {
-            Vector2 center = PixelSnap(new Vector2(bounds.X + bounds.Width * 0.5f, bounds.Y + bounds.Height * 0.5f));
-            float halfSpan = MathF.Max(5f, (MathF.Min(bounds.Width, bounds.Height) - IconPadding * 2f) * 0.5f);
+            int glyphHeight = IconDiagonalOffsets.Length;
+            int maxOffset = IconDiagonalOffsets[(glyphHeight - 1) / 2];
+            int glyphWidth = maxOffset * 2 + IconStrokeWidth;
+            int glyphX = bounds.X + (bounds.Width - glyphWidth) / 2;
+            int glyphY = bounds.Y + (bounds.Height - glyphHeight) / 2;
 
-            Vector2 topLeft = PixelSnap(center + new Vector2(-halfSpan, -halfSpan));
-            Vector2 bottomRight = PixelSnap(center + new Vector2(halfSpan, halfSpan));
-            Vector2 bottomLeft = PixelSnap(center + new Vector2(-halfSpan, halfSpan));
-            Vector2 topRight = PixelSnap(center + new Vector2(halfSpan, -halfSpan));
+            for (int row = 0; row < glyphHeight; row++)
+            {
+                int offset = IconDiagonalOffsets[row];
+                int rowY = glyphY + row;
+                int leftX = glyphX + offset;
+                int rightX = glyphX + glyphWidth - offset - IconStrokeWidth;
 
-            DrawLine(spriteBatch, topLeft, bottomRight, color, IconThickness);
-            DrawLine(spriteBatch, bottomLeft, topRight, color, IconThickness);
+                DrawRect(spriteBatch, new Rectangle(leftX, rowY, IconStrokeWidth, 1), color);
+                if (rightX > leftX)
+                {
+                    DrawRect(spriteBatch, new Rectangle(rightX, rowY, IconStrokeWidth, 1), color);
+                }
+            }
         }
 
         private static void DrawRect(SpriteBatch spriteBatch, Rectangle rectangle, Color color)
@@ -73,30 +81,5 @@ namespace SteroidGuide.Common.UI
             DrawRect(spriteBatch, new Rectangle(rectangle.Right - thickness, rectangle.Y, thickness, rectangle.Height), color);
         }
 
-        private static void DrawLine(SpriteBatch spriteBatch, Vector2 start, Vector2 end, Color color, float thickness)
-        {
-            Vector2 edge = end - start;
-            if (edge.LengthSquared() <= 0f)
-            {
-                return;
-            }
-
-            float angle = MathF.Atan2(edge.Y, edge.X);
-            spriteBatch.Draw(
-                TextureAssets.MagicPixel.Value,
-                start,
-                null,
-                color,
-                angle,
-                new Vector2(0f, 0.5f),
-                new Vector2(edge.Length(), thickness),
-                SpriteEffects.None,
-                0f);
-        }
-
-        private static Vector2 PixelSnap(Vector2 point)
-        {
-            return new Vector2(MathF.Round(point.X), MathF.Round(point.Y));
-        }
     }
 }

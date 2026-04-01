@@ -77,25 +77,45 @@ namespace SteroidGuide.Common.UI
 
         public void Focus()
         {
-            if (IsFocused)
+            if (!IsFocused)
+            {
+                IsFocused = true;
+                Main.clrInput();
+            }
+
+            ApplyFocusedInputCapture();
+        }
+
+        public void ApplyFocusedInputCapture()
+        {
+            if (!IsFocused)
             {
                 return;
             }
 
-            IsFocused = true;
             PlayerInput.WritingText = true;
 
             if (Main.LocalPlayer != null)
             {
                 Main.LocalPlayer.mouseInterface = true;
             }
-
-            Main.clrInput();
         }
 
         public void Unfocus()
         {
             IsFocused = false;
+        }
+
+        public bool HandleEnter()
+        {
+            if (!IsFocused)
+            {
+                return false;
+            }
+
+            Unfocus();
+            Main.clrInput();
+            return true;
         }
 
         public bool HandleEscape()
@@ -122,13 +142,7 @@ namespace SteroidGuide.Common.UI
                 return;
             }
 
-            if (Main.LocalPlayer != null)
-            {
-                Main.LocalPlayer.mouseInterface = true;
-            }
-
-            PlayerInput.WritingText = true;
-
+            ApplyFocusedInputCapture();
             string updatedText = Main.GetInputText(_text);
             SetText(updatedText);
         }

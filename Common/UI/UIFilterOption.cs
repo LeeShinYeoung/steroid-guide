@@ -23,7 +23,7 @@ namespace SteroidGuide.Common.UI
         {
             _label = label;
             Width.Set(0f, 1f);
-            Height.Set(24f, 0f);
+            Height.Set(28f, 0f);
         }
 
         public void SetSelected(bool selected)
@@ -79,7 +79,7 @@ namespace SteroidGuide.Common.UI
 
             var indicatorRect = new Rectangle(
                 (int)(rowBounds.X + IndicatorLeftPadding),
-                rowBounds.Center.Y - IndicatorSize / 2,
+                rowBounds.Y + (rowBounds.Height - IndicatorSize) / 2,
                 IndicatorSize,
                 IndicatorSize);
 
@@ -96,7 +96,7 @@ namespace SteroidGuide.Common.UI
             Vector2 labelSize = FontAssets.MouseText.Value.MeasureString(_label) * TextScale;
             Vector2 labelPosition = new(
                 rowBounds.X + LabelLeftPadding,
-                rowBounds.Y + (rowBounds.Height - labelSize.Y) * 0.5f - 1f);
+                rowBounds.Y + (rowBounds.Height - labelSize.Y) * 0.5f);
             Utils.DrawBorderString(spriteBatch, _label, labelPosition, textColor, TextScale);
         }
 
