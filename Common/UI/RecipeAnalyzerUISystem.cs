@@ -17,6 +17,7 @@ namespace SteroidGuide.Common.UI
         private bool _escWasDown;
         private bool _enterWasDown;
         private int _talkingNpcIndex = -1;
+        private bool _pendingChatClose;
 
         public bool IsVisible => _isVisible;
         public int TalkingNpcIndex => _talkingNpcIndex;
@@ -44,6 +45,7 @@ namespace SteroidGuide.Common.UI
             _escWasDown = false;
             _enterWasDown = false;
             _talkingNpcIndex = npcIndex;
+            _pendingChatClose = true;
             AnalyzerInterface?.SetState(AnalyzerState);
             AnalyzerState?.OnShow();
         }
@@ -83,6 +85,13 @@ namespace SteroidGuide.Common.UI
 
         public override void UpdateUI(GameTime gameTime)
         {
+            if (_pendingChatClose)
+            {
+                _pendingChatClose = false;
+                Main.player[Main.myPlayer].SetTalkNPC(-1);
+                Main.npcChatText = "";
+            }
+
             if (!_isVisible)
                 return;
 

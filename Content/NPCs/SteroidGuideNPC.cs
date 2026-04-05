@@ -1,6 +1,4 @@
 using System.Collections.Generic;
-using Microsoft.Xna.Framework.Graphics;
-using ReLogic.Content;
 using Terraria;
 using Terraria.GameContent;
 using Terraria.GameContent.Bestiary;
@@ -17,29 +15,11 @@ namespace SteroidGuide.Content.NPCs
     public class SteroidGuideNPC : ModNPC
     {
         private const int VanillaGuideType = NPCID.Guide;
+        private static Profiles.StackedNPCProfile NPCProfile;
 
-        private const string VanillaGuideBodyTexturePath = "Terraria/Images/TownNPCs/Guide";
-
-        private const string VanillaGuideProfileTexturePath = "Images/TownNPCs/Guide";
-
-        private const string SteroidGuideHeadTexturePath = "SteroidGuide/Content/NPCs/SteroidGuideNPC_Head";
-
-        public override string Texture => VanillaGuideBodyTexturePath;
-
-        public override string HeadTexture => SteroidGuideHeadTexturePath;
-
-        public override ITownNPCProfile TownNPCProfile() =>
-            new Profiles.LegacyNPCProfile(
-                VanillaGuideProfileTexturePath,
-                ModContent.GetModHeadSlot(SteroidGuideHeadTexturePath),
-                includeDefault: true,
-                uniquePartyTexture: false);
-
-        public override void AutoStaticDefaults()
+        public override ITownNPCProfile TownNPCProfile()
         {
-            // Base AutoStaticDefaults calls ModContent.Request(Texture) which fails
-            // for vanilla asset paths. Reuse the already-loaded vanilla Guide texture.
-            TextureAssets.Npc[Type] = TextureAssets.Npc[VanillaGuideType];
+            return NPCProfile;
         }
 
         public override void SetStaticDefaults()
@@ -48,6 +28,14 @@ namespace SteroidGuide.Content.NPCs
             NPCID.Sets.ExtraFramesCount[Type] = NPCID.Sets.ExtraFramesCount[VanillaGuideType];
             NPCID.Sets.AttackFrameCount[Type] = NPCID.Sets.AttackFrameCount[VanillaGuideType];
             NPCID.Sets.HatOffsetY[Type] = NPCID.Sets.HatOffsetY[VanillaGuideType];
+            NPCID.Sets.DangerDetectRange[Type] = 700;
+            NPCID.Sets.AttackType[Type] = 0;
+            NPCID.Sets.AttackTime[Type] = 90;
+            NPCID.Sets.AttackAverageChance[Type] = 30;
+
+            NPCProfile = new Profiles.StackedNPCProfile(
+                new Profiles.DefaultNPCProfile(Texture, NPCHeadLoader.GetHeadSlot(HeadTexture))
+            );
 
             NPC.Happiness
                 .SetBiomeAffection<ForestBiome>(AffectionLevel.Like)
@@ -166,9 +154,6 @@ namespace SteroidGuide.Content.NPCs
             {
                 var uiSystem = ModContent.GetInstance<RecipeAnalyzerUISystem>();
                 uiSystem?.ShowUI(NPC.whoAmI);
-
-                Main.player[Main.myPlayer].SetTalkNPC(-1);
-                Main.npcChatText = "";
             }
         }
     }
