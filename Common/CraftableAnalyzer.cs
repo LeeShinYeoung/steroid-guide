@@ -29,7 +29,7 @@ namespace SteroidGuide.Common
         public List<int> TopTierItems = new();
     }
 
-    public static class RecipeAnalyzer
+    public static class CraftableAnalyzer
     {
         public static AnalysisResult Analyze(RecipeGraphData graph, Dictionary<int, int> available)
         {

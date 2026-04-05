@@ -4,7 +4,7 @@ using Terraria;
 
 namespace SteroidGuide.Common.UI
 {
-    public partial class RecipeAnalyzerUIState
+    public partial class CraftableUIState
     {
         private readonly struct CachedItemProps
         {
@@ -46,7 +46,7 @@ namespace SteroidGuide.Common.UI
             var graph = RecipeGraphSystem.Graph;
             if (graph == null || scanResult.Items == null) return;
 
-            _analysisResult = RecipeAnalyzer.Analyze(graph, scanResult.Items);
+            _analysisResult = CraftableAnalyzer.Analyze(graph, scanResult.Items);
             RebuildItemPropsCache();
             ApplyFilter();
         }
@@ -65,7 +65,7 @@ namespace SteroidGuide.Common.UI
                 _itemPropsCache[itemId] = new CachedItemProps(item);
 
                 if (graph != null)
-                    _recipeDepthCache[itemId] = RecipeAnalyzer.GetRecipeDepth(itemId, graph);
+                    _recipeDepthCache[itemId] = CraftableAnalyzer.GetRecipeDepth(itemId, graph);
             }
         }
 

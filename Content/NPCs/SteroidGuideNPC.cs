@@ -69,7 +69,7 @@ namespace SteroidGuide.Content.NPCs
 
         public override bool PreAI()
         {
-            var uiSystem = ModContent.GetInstance<RecipeAnalyzerUISystem>();
+            var uiSystem = ModContent.GetInstance<CraftableUISystem>();
             if (uiSystem != null && uiSystem.IsVisible && uiSystem.TalkingNpcIndex == NPC.whoAmI)
             {
                 NPC.velocity = Microsoft.Xna.Framework.Vector2.Zero;
@@ -143,14 +143,14 @@ namespace SteroidGuide.Content.NPCs
 
         public override void SetChatButtons(ref string button, ref string button2)
         {
-            button = this.GetLocalizedValue("AnalyzeButton");
+            button = this.GetLocalizedValue("CraftableButton");
         }
 
         public override void OnChatButtonClicked(bool firstButton, ref string shopName)
         {
             if (firstButton)
             {
-                var uiSystem = ModContent.GetInstance<RecipeAnalyzerUISystem>();
+                var uiSystem = ModContent.GetInstance<CraftableUISystem>();
                 uiSystem?.ShowUI(NPC.whoAmI);
             }
         }

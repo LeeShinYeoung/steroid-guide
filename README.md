@@ -22,7 +22,7 @@ Recalculation only triggers when inventory or visible chests actually change.
 
 ## The NPC
 
-Steroid Guide is a passive town NPC that spawns when a valid house is available. Talk to him and click **"Analyze Recipes"** to open the recipe analyzer UI.
+Steroid Guide is a passive town NPC that spawns when a valid house is available. Talk to him and click **"Craftable"** to open the craftable items UI.
 
 He has opinions about the vanilla Guide.
 

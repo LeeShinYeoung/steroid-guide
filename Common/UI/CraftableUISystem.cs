@@ -9,10 +9,10 @@ using Terraria.UI;
 
 namespace SteroidGuide.Common.UI
 {
-    public class RecipeAnalyzerUISystem : ModSystem
+    public class CraftableUISystem : ModSystem
     {
-        internal UserInterface AnalyzerInterface;
-        internal RecipeAnalyzerUIState AnalyzerState;
+        internal UserInterface CraftableInterface;
+        internal CraftableUIState CraftableState;
         private bool _isVisible;
         private bool _escWasDown;
         private bool _enterWasDown;
@@ -27,16 +27,16 @@ namespace SteroidGuide.Common.UI
         {
             if (!Main.dedServ)
             {
-                AnalyzerInterface = new UserInterface();
-                AnalyzerState = new RecipeAnalyzerUIState();
-                AnalyzerState.Activate();
+                CraftableInterface = new UserInterface();
+                CraftableState = new CraftableUIState();
+                CraftableState.Activate();
             }
         }
 
         public override void Unload()
         {
-            AnalyzerState = null;
-            AnalyzerInterface = null;
+            CraftableState = null;
+            CraftableInterface = null;
         }
 
         public void ShowUI(int npcIndex = -1)
@@ -46,8 +46,8 @@ namespace SteroidGuide.Common.UI
             _enterWasDown = false;
             _talkingNpcIndex = npcIndex;
             _pendingChatClose = true;
-            AnalyzerInterface?.SetState(AnalyzerState);
-            AnalyzerState?.OnShow();
+            CraftableInterface?.SetState(CraftableState);
+            CraftableState?.OnShow();
         }
 
         public void HideUI()
@@ -56,24 +56,24 @@ namespace SteroidGuide.Common.UI
             _escWasDown = false;
             _enterWasDown = false;
             _talkingNpcIndex = -1;
-            AnalyzerInterface?.SetState(null);
+            CraftableInterface?.SetState(null);
         }
 
         public override void PostUpdateInput()
         {
-            if (!_isVisible || AnalyzerState == null)
+            if (!_isVisible || CraftableState == null)
             {
                 return;
             }
 
-            if (AnalyzerState.IsSearchFocused)
+            if (CraftableState.IsSearchFocused)
             {
-                AnalyzerState.ApplySearchTextInputCapture();
+                CraftableState.ApplySearchTextInputCapture();
             }
 
-            if (AnalyzerState.IsMouseOverMainPanel && PlayerInput.ScrollWheelDeltaForUI != 0)
+            if (CraftableState.IsMouseOverMainPanel && PlayerInput.ScrollWheelDeltaForUI != 0)
             {
-                PlayerInput.LockVanillaMouseScroll("SteroidGuide.RecipeAnalyzer.Panel");
+                PlayerInput.LockVanillaMouseScroll("SteroidGuide.Craftable.Panel");
             }
         }
 
@@ -95,23 +95,23 @@ namespace SteroidGuide.Common.UI
             if (!_isVisible)
                 return;
 
-            AnalyzerInterface?.Update(gameTime);
+            CraftableInterface?.Update(gameTime);
 
             bool enterDown = Main.keyState.IsKeyDown(Keys.Enter);
-            if (enterDown && !_enterWasDown && AnalyzerState?.HandleSearchEnterKey() == true)
+            if (enterDown && !_enterWasDown && CraftableState?.HandleSearchEnterKey() == true)
             {
                 _enterWasDown = true;
                 return;
             }
             _enterWasDown = enterDown;
 
-            AnalyzerState?.UpdateSearchTextInput();
+            CraftableState?.UpdateSearchTextInput();
 
             // ESC to close
             bool escDown = Main.keyState.IsKeyDown(Keys.Escape);
             if (escDown && !_escWasDown)
             {
-                if (AnalyzerState?.HandleEscapeKey() == true)
+                if (CraftableState?.HandleEscapeKey() == true)
                 {
                     _escWasDown = escDown;
                     return;
@@ -152,12 +152,12 @@ namespace SteroidGuide.Common.UI
             if (mouseTextIndex != -1)
             {
                 layers.Insert(mouseTextIndex, new LegacyGameInterfaceLayer(
-                    "SteroidGuide: Recipe Analyzer",
+                    "SteroidGuide: Craftable",
                     delegate
                     {
                         if (_isVisible)
                         {
-                            AnalyzerInterface.Draw(Main.spriteBatch, new GameTime());
+                            CraftableInterface.Draw(Main.spriteBatch, new GameTime());
                         }
                         return true;
                     },

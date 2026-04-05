@@ -6,7 +6,7 @@ using Terraria.Localization;
 
 namespace SteroidGuide.Common.UI
 {
-    public partial class RecipeAnalyzerUIState
+    public partial class CraftableUIState
     {
         private void SetFilter(FilterCategory category)
         {
@@ -227,7 +227,7 @@ namespace SteroidGuide.Common.UI
 
             if (_latestScanResult.HasValue && _latestScanResult.Value.Items != null && RecipeGraphSystem.Graph != null)
             {
-                var tree = RecipeAnalyzer.BuildRecipeTree(
+                var tree = CraftableAnalyzer.BuildRecipeTree(
                     itemId,
                     1,
                     RecipeGraphSystem.Graph,

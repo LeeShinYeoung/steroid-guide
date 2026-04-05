@@ -17,7 +17,7 @@ namespace SteroidGuide.Common.UI
         RecipeDepth
     }
 
-    public partial class RecipeAnalyzerUIState : UIState
+    public partial class CraftableUIState : UIState
     {
         private const string NearbyChestStatusSingularKey = "Mods.SteroidGuide.UI.NearbyChestStatusSingular";
         private const string NearbyChestStatusSingularFallback = "Referencing {0} nearby chest";
@@ -125,7 +125,7 @@ namespace SteroidGuide.Common.UI
             closeButton.Left.Set(-34f, 1f);
             closeButton.OnLeftClick += (evt, el) =>
             {
-                ModContent.GetInstance<RecipeAnalyzerUISystem>()?.HideUI();
+                ModContent.GetInstance<CraftableUISystem>()?.HideUI();
             };
             _mainPanel.Append(closeButton);
 

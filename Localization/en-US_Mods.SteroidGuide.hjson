@@ -31,7 +31,7 @@ NPCs: {
 		}
 
 		Bestiary: A guide who has transcended ordinary recipe knowledge. He analyzes your entire inventory to reveal the most powerful items you can craft.
-		AnalyzeButton: Analyze Recipes
+		CraftableButton: Craftable
 	}
 }
 
