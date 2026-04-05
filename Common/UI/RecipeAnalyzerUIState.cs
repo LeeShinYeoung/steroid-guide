@@ -72,7 +72,8 @@ namespace SteroidGuide.Common.UI
         // State
         private AnalysisResult _analysisResult;
         private ScanResult? _latestScanResult;
-        private readonly Dictionary<int, string> _normalizedItemNames = new();
+        private readonly Dictionary<int, CachedItemProps> _itemPropsCache = new();
+        private readonly Dictionary<int, int> _recipeDepthCache = new();
         private List<int> _filteredItems = new();
         private int _currentPage;
         private int _totalPages = 1;
@@ -326,7 +327,7 @@ namespace SteroidGuide.Common.UI
             if (graph == null || scanResult.Items == null) return;
 
             _analysisResult = RecipeAnalyzer.Analyze(graph, scanResult.Items);
-            RebuildItemNameCache();
+            RebuildItemPropsCache();
             ApplyFilter();
         }
 
@@ -373,14 +374,14 @@ namespace SteroidGuide.Common.UI
             _filteredItems.Clear();
             foreach (int itemId in _analysisResult.TopTierItems)
             {
-                if (_currentFilter != FilterCategory.All && ItemCategoryClassifier.Classify(itemId) != _currentFilter)
+                if (!_itemPropsCache.TryGetValue(itemId, out var props))
                     continue;
 
-                if (hasSearchQuery && (!_normalizedItemNames.TryGetValue(itemId, out string normalizedName) ||
-                    !normalizedName.Contains(normalizedQuery, StringComparison.Ordinal)))
-                {
+                if (_currentFilter != FilterCategory.All && props.Category != _currentFilter)
                     continue;
-                }
+
+                if (hasSearchQuery && !props.NormalizedName.Contains(normalizedQuery, StringComparison.Ordinal))
+                    continue;
 
                 _filteredItems.Add(itemId);
             }
@@ -388,39 +389,32 @@ namespace SteroidGuide.Common.UI
             // Apply sorting
             _filteredItems.Sort((a, b) =>
             {
+                var propsA = _itemPropsCache[a];
+                var propsB = _itemPropsCache[b];
+
                 switch (_currentSort)
                 {
                     case SortCriteria.Rarity:
                     {
-                        var itemA = new Item(); itemA.SetDefaults(a);
-                        var itemB = new Item(); itemB.SetDefaults(b);
-                        int cmp = itemB.rare.CompareTo(itemA.rare);
+                        int cmp = propsB.Rare.CompareTo(propsA.Rare);
                         return cmp != 0 ? cmp : a.CompareTo(b);
                     }
                     case SortCriteria.Name:
                     {
-                        _normalizedItemNames.TryGetValue(a, out string nameA);
-                        _normalizedItemNames.TryGetValue(b, out string nameB);
-                        int cmp = string.Compare(nameA, nameB, StringComparison.Ordinal);
+                        int cmp = string.Compare(propsA.NormalizedName, propsB.NormalizedName, StringComparison.Ordinal);
                         return cmp != 0 ? cmp : a.CompareTo(b);
                     }
                     case SortCriteria.Value:
                     {
-                        var itemA = new Item(); itemA.SetDefaults(a);
-                        var itemB = new Item(); itemB.SetDefaults(b);
-                        int cmp = itemB.value.CompareTo(itemA.value);
+                        int cmp = propsB.Value.CompareTo(propsA.Value);
                         return cmp != 0 ? cmp : a.CompareTo(b);
                     }
                     case SortCriteria.RecipeDepth:
                     {
-                        var graph = RecipeGraphSystem.Graph;
-                        int depthA = graph != null ? RecipeAnalyzer.GetRecipeDepth(a, graph) : 0;
-                        int depthB = graph != null ? RecipeAnalyzer.GetRecipeDepth(b, graph) : 0;
+                        _recipeDepthCache.TryGetValue(a, out int depthA);
+                        _recipeDepthCache.TryGetValue(b, out int depthB);
                         int cmp = depthB.CompareTo(depthA);
-                        if (cmp != 0) return cmp;
-                        var itemA = new Item(); itemA.SetDefaults(a);
-                        var itemB = new Item(); itemB.SetDefaults(b);
-                        return itemB.rare.CompareTo(itemA.rare);
+                        return cmp != 0 ? cmp : propsB.Rare.CompareTo(propsA.Rare);
                     }
                     default:
                         return 0;
@@ -558,19 +552,37 @@ namespace SteroidGuide.Common.UI
             ApplyFilter();
         }
 
-        private void RebuildItemNameCache()
+        private readonly struct CachedItemProps
         {
-            _normalizedItemNames.Clear();
-            if (_analysisResult == null)
-            {
-                return;
-            }
+            public readonly string NormalizedName;
+            public readonly int Rare;
+            public readonly int Value;
+            public readonly FilterCategory Category;
 
+            public CachedItemProps(Item item)
+            {
+                NormalizedName = NormalizeSearchText(item.Name);
+                Rare = item.rare;
+                Value = item.value;
+                Category = ItemCategoryClassifier.Classify(item);
+            }
+        }
+
+        private void RebuildItemPropsCache()
+        {
+            _itemPropsCache.Clear();
+            _recipeDepthCache.Clear();
+            if (_analysisResult == null) return;
+
+            var graph = RecipeGraphSystem.Graph;
             foreach (int itemId in _analysisResult.TopTierItems)
             {
                 var item = new Item();
                 item.SetDefaults(itemId);
-                _normalizedItemNames[itemId] = NormalizeSearchText(item.Name);
+                _itemPropsCache[itemId] = new CachedItemProps(item);
+
+                if (graph != null)
+                    _recipeDepthCache[itemId] = RecipeAnalyzer.GetRecipeDepth(itemId, graph);
             }
         }
 
