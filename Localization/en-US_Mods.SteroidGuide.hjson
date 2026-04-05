@@ -16,6 +16,22 @@ NPCs: {
 			LikeNPC_Princess: I like {NPCName}.
 			Princess_LovesNPC: I like {NPCName}.
 		}
+
+		Chat: {
+			Standard1: I've memorized every recipe in existence. Try me.
+			Standard2: The Guide shows you one recipe at a time? That's cute.
+			Standard3: Bring your materials, open your chests, and I'll tell you what you can really make.
+			Standard4: I can see the full picture. Every crafting chain, every possibility.
+			GuidePresent: "Don't tell {0} I said this, but his recipe book is... incomplete."
+			BloodMoon: Even during a Blood Moon, the recipes don't change. Focus.
+			Rain: Rain doesn't stop the forge. Let's see what you can craft.
+			HardMode: New ores, new souls, new possibilities. Let me analyze your inventory again.
+			MoonLord: You've conquered the Moon Lord, but have you crafted the Zenith? Let me check.
+			PlayerDied: "{0} should have crafted better armor. I told them what was available."
+		}
+
+		Bestiary: A guide who has transcended ordinary recipe knowledge. He analyzes your entire inventory to reveal the most powerful items you can craft.
+		AnalyzeButton: Analyze Recipes
 	}
 }
 

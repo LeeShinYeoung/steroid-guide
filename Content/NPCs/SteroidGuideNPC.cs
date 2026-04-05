@@ -82,9 +82,7 @@ namespace SteroidGuide.Content.NPCs
         {
             bestiaryEntry.Info.AddRange(new IBestiaryInfoElement[]
             {
-                new FlavorTextBestiaryInfoElement(
-                    "A guide who has transcended ordinary recipe knowledge. " +
-                    "He analyzes your entire inventory to reveal the most powerful items you can craft.")
+                new FlavorTextBestiaryInfoElement(this.GetLocalizedValue("Bestiary"))
             });
         }
 
@@ -112,40 +110,40 @@ namespace SteroidGuide.Content.NPCs
         {
             var chat = new WeightedRandom<string>();
 
-            chat.Add("I've memorized every recipe in existence. Try me.");
-            chat.Add("The Guide shows you one recipe at a time? That's cute.");
-            chat.Add("Bring your materials, open your chests, and I'll tell you what you can really make.");
-            chat.Add("I can see the full picture. Every crafting chain, every possibility.");
+            chat.Add(this.GetLocalizedValue("Chat.Standard1"));
+            chat.Add(this.GetLocalizedValue("Chat.Standard2"));
+            chat.Add(this.GetLocalizedValue("Chat.Standard3"));
+            chat.Add(this.GetLocalizedValue("Chat.Standard4"));
 
             int guideIndex = NPC.FindFirstNPC(NPCID.Guide);
             if (guideIndex >= 0)
             {
                 string guideName = Main.npc[guideIndex].GivenName;
-                chat.Add($"Don't tell {guideName} I said this, but his recipe book is... incomplete.");
+                chat.Add(string.Format(this.GetLocalizedValue("Chat.GuidePresent"), guideName));
             }
 
             if (Main.bloodMoon)
-                chat.Add("Even during a Blood Moon, the recipes don't change. Focus.");
+                chat.Add(this.GetLocalizedValue("Chat.BloodMoon"));
 
             if (Main.raining)
-                chat.Add("Rain doesn't stop the forge. Let's see what you can craft.");
+                chat.Add(this.GetLocalizedValue("Chat.Rain"));
 
             if (Main.hardMode)
-                chat.Add("New ores, new souls, new possibilities. Let me analyze your inventory again.");
+                chat.Add(this.GetLocalizedValue("Chat.HardMode"));
 
             if (NPC.downedMoonlord)
-                chat.Add("You've conquered the Moon Lord, but have you crafted the Zenith? Let me check.");
+                chat.Add(this.GetLocalizedValue("Chat.MoonLord"));
 
             var modPlayer = Main.LocalPlayer.GetModPlayer<SteroidGuideModPlayer>();
             if (modPlayer.RecentlyDied)
-                chat.Add($"{Main.LocalPlayer.name} should have crafted better armor. I told them what was available.");
+                chat.Add(string.Format(this.GetLocalizedValue("Chat.PlayerDied"), Main.LocalPlayer.name));
 
             return chat;
         }
 
         public override void SetChatButtons(ref string button, ref string button2)
         {
-            button = "Analyze Recipes";
+            button = this.GetLocalizedValue("AnalyzeButton");
         }
 
         public override void OnChatButtonClicked(bool firstButton, ref string shopName)
