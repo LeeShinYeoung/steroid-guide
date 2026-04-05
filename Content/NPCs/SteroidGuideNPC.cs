@@ -1,6 +1,4 @@
 using System.Collections.Generic;
-using Microsoft.Xna.Framework.Graphics;
-using ReLogic.Content;
 using Terraria;
 using Terraria.GameContent;
 using Terraria.GameContent.Bestiary;
@@ -13,44 +11,40 @@ using SteroidGuide.Content.Players;
 
 namespace SteroidGuide.Content.NPCs
 {
-    public class SteroidGuideProfile : ITownNPCProfile
-    {
-        public int RollVariation() => 0;
-
-        public string GetNameForVariant(NPC npc) => npc.getNewNPCName();
-
-        public Asset<Texture2D> GetTextureNPCShouldUse(NPC npc)
-        {
-            return TextureAssets.Npc[NPCID.Guide];
-        }
-
-        public int GetHeadTextureIndex(NPC npc)
-        {
-            return ModContent.GetModHeadSlot("SteroidGuide/Content/NPCs/SteroidGuideNPC_Head");
-        }
-    }
-
     [AutoloadHead]
     public class SteroidGuideNPC : ModNPC
     {
-        public override string Texture => $"Terraria/Images/NPC_{NPCID.Guide}";
+        private const int VanillaGuideType = NPCID.Guide;
+        private static Profiles.StackedNPCProfile NPCProfile;
 
-        public override string HeadTexture => "SteroidGuide/Content/NPCs/SteroidGuideNPC_Head";
-
-        public override ITownNPCProfile TownNPCProfile() => new SteroidGuideProfile();
+        public override ITownNPCProfile TownNPCProfile()
+        {
+            return NPCProfile;
+        }
 
         public override void SetStaticDefaults()
         {
-            Main.npcFrameCount[Type] = 25;
-            NPCID.Sets.ExtraFramesCount[Type] = 9;
-            NPCID.Sets.AttackFrameCount[Type] = 4;
-            NPCID.Sets.HatOffsetY[Type] = 4;
+            Main.npcFrameCount[Type] = Main.npcFrameCount[VanillaGuideType];
+            NPCID.Sets.ExtraFramesCount[Type] = NPCID.Sets.ExtraFramesCount[VanillaGuideType];
+            NPCID.Sets.AttackFrameCount[Type] = NPCID.Sets.AttackFrameCount[VanillaGuideType];
+            NPCID.Sets.HatOffsetY[Type] = NPCID.Sets.HatOffsetY[VanillaGuideType];
+            NPCID.Sets.DangerDetectRange[Type] = 700;
+            NPCID.Sets.AttackType[Type] = 0;
+            NPCID.Sets.AttackTime[Type] = 90;
+            NPCID.Sets.AttackAverageChance[Type] = 30;
+
+            NPCProfile = new Profiles.StackedNPCProfile(
+                new Profiles.DefaultNPCProfile(Texture, NPCHeadLoader.GetHeadSlot(HeadTexture))
+            );
 
             NPC.Happiness
                 .SetBiomeAffection<ForestBiome>(AffectionLevel.Like)
-                .SetBiomeAffection<SnowBiome>(AffectionLevel.Dislike)
+                .SetBiomeAffection<OceanBiome>(AffectionLevel.Dislike)
                 .SetNPCAffection(NPCID.Guide, AffectionLevel.Like)
-                .SetNPCAffection(NPCID.ArmsDealer, AffectionLevel.Dislike);
+                .SetNPCAffection(NPCID.Clothier, AffectionLevel.Like)
+                .SetNPCAffection(NPCID.BestiaryGirl, AffectionLevel.Like)
+                .SetNPCAffection(NPCID.Steampunker, AffectionLevel.Dislike)
+                .SetNPCAffection(NPCID.Painter, AffectionLevel.Hate);
 
             NPCID.Sets.NPCBestiaryDrawModifiers value = new()
             {
@@ -73,12 +67,12 @@ namespace SteroidGuide.Content.NPCs
             NPC.HitSound = SoundID.NPCHit1;
             NPC.DeathSound = SoundID.NPCDeath1;
             NPC.knockBackResist = 0.5f;
-            AnimationType = NPCID.Guide;
+            AnimationType = VanillaGuideType;
         }
 
         public override bool PreAI()
         {
-            var uiSystem = ModContent.GetInstance<RecipeAnalyzerUISystem>();
+            var uiSystem = ModContent.GetInstance<CraftableUISystem>();
             if (uiSystem != null && uiSystem.IsVisible && uiSystem.TalkingNpcIndex == NPC.whoAmI)
             {
                 NPC.velocity = Microsoft.Xna.Framework.Vector2.Zero;
@@ -91,9 +85,7 @@ namespace SteroidGuide.Content.NPCs
         {
             bestiaryEntry.Info.AddRange(new IBestiaryInfoElement[]
             {
-                new FlavorTextBestiaryInfoElement(
-                    "A guide who has transcended ordinary recipe knowledge. " +
-                    "He analyzes your entire inventory to reveal the most powerful items you can craft.")
+                new FlavorTextBestiaryInfoElement(this.GetLocalizedValue("Bestiary"))
             });
         }
 
@@ -121,51 +113,48 @@ namespace SteroidGuide.Content.NPCs
         {
             var chat = new WeightedRandom<string>();
 
-            chat.Add("I've memorized every recipe in existence. Try me.");
-            chat.Add("The Guide shows you one recipe at a time? That's cute.");
-            chat.Add("Bring your materials, open your chests, and I'll tell you what you can really make.");
-            chat.Add("I can see the full picture. Every crafting chain, every possibility.");
+            chat.Add(this.GetLocalizedValue("Chat.Standard1"));
+            chat.Add(this.GetLocalizedValue("Chat.Standard2"));
+            chat.Add(this.GetLocalizedValue("Chat.Standard3"));
+            chat.Add(this.GetLocalizedValue("Chat.Standard4"));
 
             int guideIndex = NPC.FindFirstNPC(NPCID.Guide);
             if (guideIndex >= 0)
             {
                 string guideName = Main.npc[guideIndex].GivenName;
-                chat.Add($"Don't tell {guideName} I said this, but his recipe book is... incomplete.");
+                chat.Add(string.Format(this.GetLocalizedValue("Chat.GuidePresent"), guideName));
             }
 
             if (Main.bloodMoon)
-                chat.Add("Even during a Blood Moon, the recipes don't change. Focus.");
+                chat.Add(this.GetLocalizedValue("Chat.BloodMoon"));
 
             if (Main.raining)
-                chat.Add("Rain doesn't stop the forge. Let's see what you can craft.");
+                chat.Add(this.GetLocalizedValue("Chat.Rain"));
 
             if (Main.hardMode)
-                chat.Add("New ores, new souls, new possibilities. Let me analyze your inventory again.");
+                chat.Add(this.GetLocalizedValue("Chat.HardMode"));
 
             if (NPC.downedMoonlord)
-                chat.Add("You've conquered the Moon Lord, but have you crafted the Zenith? Let me check.");
+                chat.Add(this.GetLocalizedValue("Chat.MoonLord"));
 
             var modPlayer = Main.LocalPlayer.GetModPlayer<SteroidGuideModPlayer>();
             if (modPlayer.RecentlyDied)
-                chat.Add($"{Main.LocalPlayer.name} should have crafted better armor. I told them what was available.");
+                chat.Add(string.Format(this.GetLocalizedValue("Chat.PlayerDied"), Main.LocalPlayer.name));
 
             return chat;
         }
 
         public override void SetChatButtons(ref string button, ref string button2)
         {
-            button = "Analyze Recipes";
+            button = this.GetLocalizedValue("CraftableButton");
         }
 
         public override void OnChatButtonClicked(bool firstButton, ref string shopName)
         {
             if (firstButton)
             {
-                var uiSystem = ModContent.GetInstance<RecipeAnalyzerUISystem>();
+                var uiSystem = ModContent.GetInstance<CraftableUISystem>();
                 uiSystem?.ShowUI(NPC.whoAmI);
-
-                Main.player[Main.myPlayer].SetTalkNPC(-1);
-                Main.npcChatText = "";
             }
         }
     }

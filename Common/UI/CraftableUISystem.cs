@@ -3,18 +3,21 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Terraria;
 using Terraria.ID;
+using Terraria.GameInput;
 using Terraria.ModLoader;
 using Terraria.UI;
 
 namespace SteroidGuide.Common.UI
 {
-    public class RecipeAnalyzerUISystem : ModSystem
+    public class CraftableUISystem : ModSystem
     {
-        internal UserInterface AnalyzerInterface;
-        internal RecipeAnalyzerUIState AnalyzerState;
+        internal UserInterface CraftableInterface;
+        internal CraftableUIState CraftableState;
         private bool _isVisible;
         private bool _escWasDown;
+        private bool _enterWasDown;
         private int _talkingNpcIndex = -1;
+        private bool _pendingChatClose;
 
         public bool IsVisible => _isVisible;
         public int TalkingNpcIndex => _talkingNpcIndex;
@@ -24,31 +27,54 @@ namespace SteroidGuide.Common.UI
         {
             if (!Main.dedServ)
             {
-                AnalyzerInterface = new UserInterface();
-                AnalyzerState = new RecipeAnalyzerUIState();
-                AnalyzerState.Activate();
+                CraftableInterface = new UserInterface();
+                CraftableState = new CraftableUIState();
+                CraftableState.Activate();
             }
         }
 
         public override void Unload()
         {
-            AnalyzerState = null;
-            AnalyzerInterface = null;
+            CraftableState = null;
+            CraftableInterface = null;
         }
 
         public void ShowUI(int npcIndex = -1)
         {
             _isVisible = true;
+            _escWasDown = false;
+            _enterWasDown = false;
             _talkingNpcIndex = npcIndex;
-            AnalyzerInterface?.SetState(AnalyzerState);
-            AnalyzerState?.OnShow();
+            _pendingChatClose = true;
+            CraftableInterface?.SetState(CraftableState);
+            CraftableState?.OnShow();
         }
 
         public void HideUI()
         {
             _isVisible = false;
+            _escWasDown = false;
+            _enterWasDown = false;
             _talkingNpcIndex = -1;
-            AnalyzerInterface?.SetState(null);
+            CraftableInterface?.SetState(null);
+        }
+
+        public override void PostUpdateInput()
+        {
+            if (!_isVisible || CraftableState == null)
+            {
+                return;
+            }
+
+            if (CraftableState.IsSearchFocused)
+            {
+                CraftableState.ApplySearchTextInputCapture();
+            }
+
+            if (CraftableState.IsMouseOverMainPanel && PlayerInput.ScrollWheelDeltaForUI != 0)
+            {
+                PlayerInput.LockVanillaMouseScroll("SteroidGuide.Craftable.Panel");
+            }
         }
 
         public void ToggleUI()
@@ -59,15 +85,38 @@ namespace SteroidGuide.Common.UI
 
         public override void UpdateUI(GameTime gameTime)
         {
+            if (_pendingChatClose)
+            {
+                _pendingChatClose = false;
+                Main.player[Main.myPlayer].SetTalkNPC(-1);
+                Main.npcChatText = "";
+            }
+
             if (!_isVisible)
                 return;
 
-            AnalyzerInterface?.Update(gameTime);
+            CraftableInterface?.Update(gameTime);
+
+            bool enterDown = Main.keyState.IsKeyDown(Keys.Enter);
+            if (enterDown && !_enterWasDown && CraftableState?.HandleSearchEnterKey() == true)
+            {
+                _enterWasDown = true;
+                return;
+            }
+            _enterWasDown = enterDown;
+
+            CraftableState?.UpdateSearchTextInput();
 
             // ESC to close
             bool escDown = Main.keyState.IsKeyDown(Keys.Escape);
             if (escDown && !_escWasDown)
             {
+                if (CraftableState?.HandleEscapeKey() == true)
+                {
+                    _escWasDown = escDown;
+                    return;
+                }
+
                 HideUI();
                 // Prevent inventory from opening on the same ESC press
                 Main.playerInventory = false;
@@ -103,12 +152,12 @@ namespace SteroidGuide.Common.UI
             if (mouseTextIndex != -1)
             {
                 layers.Insert(mouseTextIndex, new LegacyGameInterfaceLayer(
-                    "SteroidGuide: Recipe Analyzer",
+                    "SteroidGuide: Craftable",
                     delegate
                     {
                         if (_isVisible)
                         {
-                            AnalyzerInterface.Draw(Main.spriteBatch, new GameTime());
+                            CraftableInterface.Draw(Main.spriteBatch, new GameTime());
                         }
                         return true;
                     },

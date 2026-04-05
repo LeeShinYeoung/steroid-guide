@@ -14,6 +14,9 @@ namespace SteroidGuide.Common.UI
 
     public class UIPaginationArrowButton : UIElement
     {
+        private static readonly int[] ArrowProfile = [1, 3, 5, 7, 9, 7, 5, 3, 1];
+        private static readonly int ArrowWidth = GetArrowWidth();
+
         private readonly PaginationArrowDirection _direction;
 
         public bool IsEnabled { get; set; } = true;
@@ -39,55 +42,42 @@ namespace SteroidGuide.Common.UI
                 ? (IsMouseHovering ? Color.White : new Color(230, 230, 230))
                 : new Color(140, 140, 140);
 
-            DrawRect(spriteBatch, bounds, backgroundColor);
-            DrawBorder(spriteBatch, bounds, borderColor, 1);
+            UIDrawHelper.DrawRect(spriteBatch, bounds, backgroundColor);
+            UIDrawHelper.DrawBorder(spriteBatch, bounds, borderColor, 1);
             DrawArrow(spriteBatch, bounds, arrowColor);
         }
 
         private void DrawArrow(SpriteBatch spriteBatch, Rectangle bounds, Color color)
         {
-            Vector2 center = new(bounds.Center.X, bounds.Center.Y);
-            float arrowHalfWidth = MathF.Max(5f, bounds.Width * 0.18f);
-            float arrowHalfHeight = MathF.Max(5f, bounds.Height * 0.24f);
-            float thickness = 3f;
+            Rectangle innerBounds = bounds;
+            innerBounds.Inflate(-5, -4);
+            int glyphHeight = ArrowProfile.Length;
+            int glyphX = innerBounds.X + (innerBounds.Width - ArrowWidth) / 2;
+            int glyphY = innerBounds.Y + (innerBounds.Height - glyphHeight) / 2;
 
-            if (_direction == PaginationArrowDirection.Left)
+            // A stepped, axis-aligned triangle stays readable under UI scaling and mirrors cleanly per direction.
+            for (int row = 0; row < ArrowProfile.Length; row++)
             {
-                Vector2 tip = new(center.X - arrowHalfWidth, center.Y);
-                Vector2 top = new(center.X + arrowHalfWidth, center.Y - arrowHalfHeight);
-                Vector2 bottom = new(center.X + arrowHalfWidth, center.Y + arrowHalfHeight);
-                DrawLine(spriteBatch, top, tip, color, thickness);
-                DrawLine(spriteBatch, tip, bottom, color, thickness);
-            }
-            else
-            {
-                Vector2 tip = new(center.X + arrowHalfWidth, center.Y);
-                Vector2 top = new(center.X - arrowHalfWidth, center.Y - arrowHalfHeight);
-                Vector2 bottom = new(center.X - arrowHalfWidth, center.Y + arrowHalfHeight);
-                DrawLine(spriteBatch, top, tip, color, thickness);
-                DrawLine(spriteBatch, tip, bottom, color, thickness);
+                int rowWidth = ArrowProfile[row];
+                int rowX = _direction == PaginationArrowDirection.Left
+                    ? glyphX + ArrowWidth - rowWidth
+                    : glyphX;
+
+                UIDrawHelper.DrawRect(spriteBatch, new Rectangle(rowX, glyphY + row, rowWidth, 1), color);
             }
         }
 
-        private static void DrawRect(SpriteBatch spriteBatch, Rectangle rectangle, Color color)
+        private static int GetArrowWidth()
         {
-            spriteBatch.Draw(TextureAssets.MagicPixel.Value, rectangle, color);
+            int width = 0;
+            foreach (int rowWidth in ArrowProfile)
+            {
+                width = Math.Max(width, rowWidth);
+            }
+
+            return width;
         }
 
-        private static void DrawBorder(SpriteBatch spriteBatch, Rectangle rectangle, Color color, int thickness)
-        {
-            DrawRect(spriteBatch, new Rectangle(rectangle.X, rectangle.Y, rectangle.Width, thickness), color);
-            DrawRect(spriteBatch, new Rectangle(rectangle.X, rectangle.Bottom - thickness, rectangle.Width, thickness), color);
-            DrawRect(spriteBatch, new Rectangle(rectangle.X, rectangle.Y, thickness, rectangle.Height), color);
-            DrawRect(spriteBatch, new Rectangle(rectangle.Right - thickness, rectangle.Y, thickness, rectangle.Height), color);
-        }
 
-        private static void DrawLine(SpriteBatch spriteBatch, Vector2 start, Vector2 end, Color color, float thickness)
-        {
-            Vector2 edge = end - start;
-            float angle = MathF.Atan2(edge.Y, edge.X);
-            var destination = new Rectangle((int)start.X, (int)start.Y, (int)edge.Length(), (int)thickness);
-            spriteBatch.Draw(TextureAssets.MagicPixel.Value, destination, null, color, angle, Vector2.Zero, SpriteEffects.None, 0f);
-        }
     }
 }

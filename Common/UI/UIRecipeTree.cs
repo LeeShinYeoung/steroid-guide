@@ -6,6 +6,8 @@ using Terraria;
 using Terraria.GameContent;
 using Terraria.GameContent.UI.Elements;
 using Terraria.ID;
+using Terraria.Map;
+using Terraria.ModLoader;
 using Terraria.UI;
 
 namespace SteroidGuide.Common.UI
@@ -17,9 +19,8 @@ namespace SteroidGuide.Common.UI
         private UIScrollbar _scrollbar;
         private UIEmptyStatePlaceholder _placeholder;
         private RecipeTreeNode _currentRoot;
-        private RecipeGraphData _currentGraph;
-        private Dictionary<int, int> _currentAvailable;
         private readonly HashSet<int> _collapsedItemIds = new();
+        private static readonly Dictionary<int, int> TileDisplayItemCache = new();
 
         private const float DepthIndent = 20f;
         private static readonly Color LineColor = Color.Gray * 0.6f;
@@ -61,11 +62,9 @@ namespace SteroidGuide.Common.UI
             ShowPlaceholder();
         }
 
-        public void SetTree(RecipeTreeNode root, RecipeGraphData graph = null, Dictionary<int, int> available = null)
+        public void SetTree(RecipeTreeNode root)
         {
             _currentRoot = root;
-            if (graph != null) _currentGraph = graph;
-            if (available != null) _currentAvailable = available;
 
             _list.Clear();
 
@@ -76,26 +75,19 @@ namespace SteroidGuide.Common.UI
             }
 
             // Root item title with icon — no tree lines
-            var rootLine = new UITreeItemLine(root.ItemId, "", Color.Gold, 0.85f, -1, false, null, TriangleState.None);
+            var rootStations = root.UsedRecipe != null ? ResolveStations(root.UsedRecipe) : new List<StationDisplayInfo>();
+            var rootLine = new UITreeItemLine(root.ItemId, "", Color.Gold, 0.85f, -1, false, null, TriangleState.None, rootStations);
             rootLine.Width.Set(0f, 1f);
-            rootLine.Height.Set(24f, 0f);
+            rootLine.Height.Set(26f, 0f);
             _list.Add(rootLine);
 
             // Tree nodes
             var emptyParentLines = new List<bool>();
-            AddChildren(root, 0, emptyParentLines);
 
-            // Crafting station for root recipe
             if (root.UsedRecipe != null)
-                AddCraftingStationLine(root.UsedRecipe, 0, emptyParentLines);
+                AddRecipeConditionLine(root.UsedRecipe, -1, emptyParentLines);
 
-            // Alternative recipe button for root
-            if (root.AlternativeRecipes != null && root.AlternativeRecipes.Count > 0)
-            {
-                var capturedRoot = root;
-                AddTreeTextLine("Alternative Recipe \u25B6", new Color(150, 200, 255), 0.7f,
-                    0, emptyParentLines, () => SwapAlternativeRecipe(capturedRoot));
-            }
+            AddChildren(root, 0, emptyParentLines);
         }
 
         private void AddChildren(RecipeTreeNode node, int depth, List<bool> parentLines)
@@ -123,22 +115,23 @@ namespace SteroidGuide.Common.UI
                     _ => Color.IndianRed
                 };
 
-                bool hasCraftableChildren = child.Status == NodeStatus.Craftable
-                    && child.Children != null && child.Children.Count > 0;
-                bool isCollapsed = _collapsedItemIds.Contains(child.ItemId);
+                bool hasRecipeDetails = HasRecipeDetails(child);
+                bool hasDisplayableChildren = HasDisplayableRecipeChildren(child);
+                bool isCollapsed = IsCollapsed(child);
 
                 string suffix = $"{countStr}{statusStr}";
 
                 TriangleState triangleState = TriangleState.None;
-                if (hasCraftableChildren)
+                if (hasDisplayableChildren)
                     triangleState = isCollapsed ? TriangleState.Collapsed : TriangleState.Expanded;
 
+                var stations = child.UsedRecipe != null ? ResolveStations(child.UsedRecipe) : new List<StationDisplayInfo>();
                 var line = new UITreeItemLine(child.ItemId, suffix, color, 0.7f,
-                    depth, isLast, parentLines, triangleState);
+                    depth, isLast, parentLines, triangleState, stations);
                 line.Width.Set(0f, 1f);
-                line.Height.Set(24f, 0f);
+                line.Height.Set(26f, 0f);
 
-                if (hasCraftableChildren)
+                if (hasDisplayableChildren)
                 {
                     var capturedChild = child;
                     line.OnLeftClick += (evt, el) => ToggleCollapse(capturedChild.ItemId);
@@ -147,22 +140,13 @@ namespace SteroidGuide.Common.UI
                 _list.Add(line);
 
                 // Show children if not collapsed
-                if (hasCraftableChildren && !isCollapsed)
+                if (hasRecipeDetails && !isCollapsed)
                 {
                     var childParentLines = new List<bool>(parentLines) { !isLast };
 
+                    AddRecipeConditionLine(child.UsedRecipe, depth, childParentLines);
+
                     AddChildren(child, depth + 1, childParentLines);
-
-                    if (child.UsedRecipe != null)
-                        AddCraftingStationLine(child.UsedRecipe, depth + 1, childParentLines);
-
-                    // Alternative Recipe button
-                    if (child.AlternativeRecipes != null && child.AlternativeRecipes.Count > 0)
-                    {
-                        var capturedChild = child;
-                        AddTreeTextLine("Alternative Recipe \u25B6", new Color(150, 200, 255), 0.65f,
-                            depth + 1, childParentLines, () => SwapAlternativeRecipe(capturedChild));
-                    }
                 }
             }
         }
@@ -176,69 +160,26 @@ namespace SteroidGuide.Common.UI
                 SetTree(_currentRoot);
         }
 
-        private void SwapAlternativeRecipe(RecipeTreeNode node)
+        private static bool HasRecipeDetails(RecipeTreeNode node)
         {
-            if (node.AlternativeRecipes == null || node.AlternativeRecipes.Count == 0)
-                return;
-
-            // Rotate: current recipe goes to end of alternatives, first alternative becomes current
-            var oldRecipe = node.UsedRecipe;
-            node.UsedRecipe = node.AlternativeRecipes[0];
-            node.AlternativeRecipes.RemoveAt(0);
-            node.AlternativeRecipes.Add(oldRecipe);
-
-            // Rebuild children for this node with the new recipe
-            if (_currentGraph != null && _currentAvailable != null)
-            {
-                node.Children.Clear();
-                int remaining = Math.Max(1, node.RequiredCount - node.OwnedCount);
-                int batchSize = Math.Max(1, node.UsedRecipe.createItem.stack);
-                int batches = (remaining + batchSize - 1) / batchSize;
-
-                foreach (var ingredient in node.UsedRecipe.requiredItem)
-                {
-                    if (ingredient.type <= ItemID.None)
-                        continue;
-                    int ingredientNeeded = ingredient.stack * batches;
-                    node.Children.Add(RecipeAnalyzer.BuildRecipeTree(
-                        ingredient.type, ingredientNeeded, _currentGraph, _currentAvailable));
-                }
-
-                // Update node status based on new children
-                bool canMake = true;
-                foreach (var child in node.Children)
-                {
-                    if (child.Status == NodeStatus.Missing)
-                    {
-                        canMake = false;
-                        break;
-                    }
-                }
-                node.Status = canMake ? NodeStatus.Craftable : NodeStatus.Missing;
-            }
-
-            // Re-render tree
-            SetTree(_currentRoot);
+            return node?.UsedRecipe != null && node.Children != null;
         }
 
-        private void AddCraftingStationLine(Recipe recipe, int depth, List<bool> parentLines)
+        private static bool HasDisplayableRecipeChildren(RecipeTreeNode node)
         {
-            var tiles = new List<string>();
-            foreach (int tileId in recipe.requiredTile)
-            {
-                if (tileId < 0) continue;
+            return HasRecipeDetails(node) && node.Children.Count > 0;
+        }
 
-                string tileName = GetTileName(tileId);
-                tiles.Add(tileName);
-            }
+        private bool IsCollapsed(RecipeTreeNode node)
+        {
+            return HasDisplayableRecipeChildren(node) && _collapsedItemIds.Contains(node.ItemId);
+        }
 
-            if (tiles.Count > 0)
-            {
-                string text = $"Crafting Station: {string.Join(", ", tiles)}";
-                AddTreeTextLine(text, Color.LightBlue, 0.65f, depth, parentLines);
-            }
+        private void AddRecipeConditionLine(Recipe recipe, int depth, List<bool> parentLines)
+        {
+            if (recipe == null)
+                return;
 
-            // Show conditions if any
             if (recipe.Conditions != null && recipe.Conditions.Count > 0)
             {
                 var condNames = new List<string>();
@@ -251,27 +192,84 @@ namespace SteroidGuide.Common.UI
             }
         }
 
+        private static List<StationDisplayInfo> ResolveStations(Recipe recipe)
+        {
+            var stations = new List<StationDisplayInfo>();
+            foreach (int tileId in recipe.requiredTile)
+            {
+                if (tileId < 0)
+                    continue;
+
+                string tileName = GetTileName(tileId);
+                int itemId = ResolveDisplayItemIdForTile(tileId);
+                stations.Add(new StationDisplayInfo(tileId, tileName, itemId));
+            }
+
+            return stations;
+        }
+
+        private static int ResolveDisplayItemIdForTile(int tileId)
+        {
+            if (TileDisplayItemCache.TryGetValue(tileId, out int cachedItemId))
+                return cachedItemId;
+
+            int resolvedItemId = ItemID.None;
+            for (int itemId = 1; itemId < ItemLoader.ItemCount; itemId++)
+            {
+                if (!UIItemRenderingHelper.TryCreateDisplayItem(itemId, out Item item))
+                    continue;
+
+                if (item.createTile == tileId)
+                {
+                    resolvedItemId = itemId;
+                    break;
+                }
+            }
+
+            TileDisplayItemCache[tileId] = resolvedItemId;
+            return resolvedItemId;
+        }
+
         private static string GetTileName(int tileId)
         {
-            // Try modded tile first
-            var modTile = Terraria.ModLoader.TileLoader.GetTile(tileId);
-            if (modTile != null)
-                return modTile.Name;
+            if (TryGetMapObjectName(tileId, out string mapObjectName))
+                return mapObjectName;
 
-            // Vanilla: use map object name
-            try
+            ModTile modTile = TileLoader.GetTile(tileId);
+            if (modTile != null)
             {
-                int lookup = Terraria.Map.MapHelper.TileToLookup(tileId, 0);
-                string name = Lang.GetMapObjectName(lookup);
-                if (!string.IsNullOrEmpty(name))
-                    return name;
-            }
-            catch
-            {
-                // Fallback
+                string localizedMapEntry = modTile.GetLocalizedValue("MapEntry");
+                string mapEntryKey = modTile.GetLocalizationKey("MapEntry");
+                if (!string.IsNullOrWhiteSpace(localizedMapEntry) &&
+                    !string.Equals(localizedMapEntry, mapEntryKey, StringComparison.Ordinal))
+                {
+                    return localizedMapEntry;
+                }
             }
 
             return $"Tile #{tileId}";
+        }
+
+        private static bool TryGetMapObjectName(int tileId, out string tileName)
+        {
+            tileName = string.Empty;
+
+            try
+            {
+                int lookup = MapHelper.TileToLookup(tileId, 0);
+                string name = Lang.GetMapObjectName(lookup);
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    tileName = name;
+                    return true;
+                }
+            }
+            catch
+            {
+                // Some tiles may not expose a map lookup entry. Leave the localized fallback to the caller.
+            }
+
+            return false;
         }
 
         private void AddTreeTextLine(string text, Color color, float scale, int depth, List<bool> parentLines, Action onClick = null)
@@ -287,6 +285,17 @@ namespace SteroidGuide.Common.UI
         private void ShowPlaceholder()
         {
             _list?.Clear();
+        }
+
+        private static Vector2 GetCenteredBorderStringPosition(string text, float leftX, float centerY, float scale)
+        {
+            Vector2 textSize = FontAssets.MouseText.Value.MeasureString(text) * scale;
+            return new Vector2(leftX, centerY - textSize.Y * 0.5f);
+        }
+
+        private static int SnapToPixel(float value)
+        {
+            return (int)MathF.Round(value);
         }
 
         private class UIEmptyStatePlaceholder : UIElement
@@ -320,6 +329,11 @@ namespace SteroidGuide.Common.UI
             }
         }
 
+        private readonly record struct StationDisplayInfo(int TileId, string DisplayName, int ItemId)
+        {
+            public bool HasDisplayItem => ItemId > ItemID.None;
+        }
+
         private enum TriangleState
         {
             None,
@@ -340,11 +354,28 @@ namespace SteroidGuide.Common.UI
             private readonly bool _isLast;
             private readonly List<bool> _parentLines;
             private readonly TriangleState _triangleState;
+            private readonly List<StationDisplayInfo> _stations;
 
             private const float TriangleSize = 8f;
+            private const float IconSize = 20f;
+            private const float BaseRowHeight = 26f;
+            private const float TextSpacing = 4f;
+            private const float InlineBadgeSpacing = 8f;
+            private const float BadgeSize = 24f;
+            private const float BadgeSpacing = 6f;
+            private const float RowSpacing = 4f;
+            private const float RightPadding = 4f;
+            private const float FallbackScale = 0.58f;
+            private const float MaxFallbackBadgeWidth = 140f;
+
+            private static readonly Color BadgeBackgroundColor = new(40, 56, 88, 210);
+            private static readonly Color BadgeBorderColor = new(124, 166, 214, 200);
+            private static readonly Color BadgeHoverColor = new(82, 112, 154, 220);
+            private static readonly Color FallbackTextColor = new(225, 235, 248);
 
             public UITreeItemLine(int itemId, string suffix, Color color, float scale,
-                int depth, bool isLast, List<bool> parentLines, TriangleState triangleState)
+                int depth, bool isLast, List<bool> parentLines, TriangleState triangleState,
+                List<StationDisplayInfo> stations = default)
             {
                 _itemId = itemId;
                 _suffix = suffix;
@@ -354,6 +385,19 @@ namespace SteroidGuide.Common.UI
                 _isLast = isLast;
                 _parentLines = parentLines != null ? new List<bool>(parentLines) : null;
                 _triangleState = triangleState;
+                _stations = stations ?? new List<StationDisplayInfo>();
+            }
+
+            public override void Recalculate()
+            {
+                base.Recalculate();
+
+                float desiredHeight = CalculateDesiredHeight(GetDimensions().Width);
+                if (Math.Abs(Height.Pixels - desiredHeight) > 0.5f)
+                {
+                    Height.Set(desiredHeight, 0f);
+                    base.Recalculate();
+                }
             }
 
             protected override void DrawSelf(SpriteBatch spriteBatch)
@@ -361,46 +405,128 @@ namespace SteroidGuide.Common.UI
                 var dims = GetDimensions();
                 float x = dims.X;
                 float y = dims.Y;
-                float centerY = y + dims.Height / 2f;
+                float centerY = y + BaseRowHeight / 2f;
 
                 // Draw graphic tree lines
                 if (_depth >= 0)
                     DrawTreeLines(spriteBatch, x, y, dims.Height, centerY);
 
                 // Content area starts after tree connector region
-                float contentX = _depth >= 0 ? x + (_depth + 1) * DepthIndent : x;
+                float contentX = GetContentX(x);
+                bool rowHovered = dims.ToRectangle().Contains(Main.mouseX, Main.mouseY);
 
                 // Draw triangle toggle for collapsible nodes
                 float triangleWidth = 0f;
                 if (_triangleState != TriangleState.None)
                 {
-                    bool hovered = GetDimensions().ToRectangle().Contains(Main.mouseX, Main.mouseY);
-                    Color triColor = hovered ? Color.Gold : Color.White;
+                    Color triColor = rowHovered ? Color.Gold : Color.White;
                     DrawTriangle(spriteBatch, new Vector2(contentX, centerY), _triangleState, triColor);
                     triangleWidth = TriangleSize + 4f;
                 }
 
                 // Draw item icon (20x20)
-                const float iconSize = 20f;
-                float iconX = contentX + triangleWidth + iconSize / 2f;
-                DrawItemIcon(spriteBatch, _itemId, new Vector2(iconX, centerY), iconSize);
+                float iconX = contentX + triangleWidth + IconSize / 2f;
+                UIItemRenderingHelper.TryDrawItemIcon(spriteBatch, _itemId, new Vector2(iconX, centerY), IconSize);
 
-                // Draw item name + suffix
-                float textX = contentX + triangleWidth + iconSize + 4f;
-                var item = new Item();
-                item.SetDefaults(_itemId);
-                string text = item.Name + _suffix;
-                Utils.DrawBorderString(spriteBatch, text, new Vector2(textX, centerY - 8f), _color, _scale);
+                // Draw item name + suffix, then inline crafting stations.
+                float textX = contentX + triangleWidth + IconSize + TextSpacing;
+                string text = GetDisplayText();
+                Vector2 textPosition = GetCenteredBorderStringPosition(text, textX, centerY, _scale);
+                Utils.DrawBorderString(spriteBatch, text, textPosition, _color, _scale);
 
-                // Hover tooltip
+                bool stationHovered = false;
+                if (_stations.Count > 0)
+                    LayoutBadges(spriteBatch, x, y, dims.Width, textX, text, out stationHovered);
+
                 var rect = dims.ToRectangle();
-                if (rect.Contains(Main.mouseX, Main.mouseY))
+                if (!stationHovered &&
+                    rect.Contains(Main.mouseX, Main.mouseY) &&
+                    UIItemRenderingHelper.TryCreateDisplayItem(_itemId, out Item hoverItem))
                 {
-                    var hoverItem = new Item();
-                    hoverItem.SetDefaults(_itemId);
                     Main.HoverItem = hoverItem.Clone();
                     Main.hoverItemName = hoverItem.Name;
                 }
+            }
+
+            private float CalculateDesiredHeight(float width)
+            {
+                if (_stations.Count == 0)
+                    return BaseRowHeight;
+
+                float contentX = GetContentX(0f);
+                float triangleWidth = _triangleState != TriangleState.None ? TriangleSize + 4f : 0f;
+                float textX = contentX + triangleWidth + IconSize + TextSpacing;
+                return LayoutBadges(null, 0f, 0f, width, textX, GetDisplayText(), out _);
+            }
+
+            private float LayoutBadges(SpriteBatch spriteBatch, float x, float y, float width, float textX, string text, out bool hoveredAny)
+            {
+                hoveredAny = false;
+
+                if (_stations.Count == 0)
+                    return BaseRowHeight;
+
+                float textWidth = FontAssets.MouseText.Value.MeasureString(text).X * _scale;
+                float desiredRowStartX = textX + textWidth + InlineBadgeSpacing;
+                float wrappedRowStartX = textX;
+                float contentRight = x + width - RightPadding;
+                float currentX = desiredRowStartX;
+                float rowStartX = desiredRowStartX;
+                float centerY = y + BaseRowHeight * 0.5f;
+                float currentY = centerY - BadgeSize * 0.5f;
+                bool placedAnyBadge = false;
+
+                foreach (StationDisplayInfo station in _stations)
+                {
+                    float badgeWidth = GetBadgeWidth(station);
+                    if (currentX + badgeWidth > contentRight)
+                    {
+                        if (!placedAnyBadge)
+                        {
+                            rowStartX = wrappedRowStartX;
+                            currentX = rowStartX;
+                            currentY = y + BaseRowHeight + RowSpacing;
+                        }
+                        else if (currentX > rowStartX)
+                        {
+                            currentX = rowStartX;
+                            currentY += BadgeSize + RowSpacing;
+                        }
+                    }
+
+                    Rectangle badgeRect = new(
+                        SnapToPixel(currentX),
+                        SnapToPixel(currentY),
+                        (int)Math.Ceiling(badgeWidth),
+                        (int)BadgeSize);
+
+                    if (spriteBatch != null)
+                    {
+                        bool hovered = badgeRect.Contains(Main.mouseX, Main.mouseY);
+                        DrawStationBadge(spriteBatch, station, badgeRect, hovered);
+                        if (hovered)
+                        {
+                            hoveredAny = true;
+                            ApplyHover(station);
+                        }
+                    }
+
+                    currentX += badgeWidth + BadgeSpacing;
+                    placedAnyBadge = true;
+                }
+
+                float badgeBottom = placedAnyBadge ? currentY + BadgeSize - y : BaseRowHeight;
+                return Math.Max(BaseRowHeight, badgeBottom);
+            }
+
+            private string GetDisplayText()
+            {
+                return UIItemRenderingHelper.GetDisplayNameOrFallback(_itemId) + _suffix;
+            }
+
+            private float GetContentX(float x)
+            {
+                return _depth >= 0 ? x + (_depth + 1) * DepthIndent : x;
             }
 
             private static void DrawTriangle(SpriteBatch spriteBatch, Vector2 center, TriangleState state, Color color)
@@ -478,29 +604,70 @@ namespace SteroidGuide.Common.UI
                     LineColor);
             }
 
-            private static void DrawItemIcon(SpriteBatch spriteBatch, int itemId, Vector2 center, float maxDim)
+            private static float GetBadgeWidth(StationDisplayInfo station)
             {
-                Main.instance.LoadItem(itemId);
-                var texture = TextureAssets.Item[itemId].Value;
+                if (station.HasDisplayItem)
+                    return BadgeSize;
 
-                Rectangle frame;
-                if (Main.itemAnimations[itemId] != null)
-                    frame = Main.itemAnimations[itemId].GetFrame(texture);
-                else
-                    frame = texture.Frame();
+                Vector2 textSize = FontAssets.MouseText.Value.MeasureString(station.DisplayName) * FallbackScale;
+                return Math.Min(MaxFallbackBadgeWidth, textSize.X + 18f);
+            }
 
-                float scale = 1f;
-                if (frame.Width > maxDim || frame.Height > maxDim)
-                    scale = maxDim / Math.Max(frame.Width, frame.Height);
+            private static void DrawStationBadge(SpriteBatch spriteBatch, StationDisplayInfo station, Rectangle badgeRect, bool hovered)
+            {
+                UIDrawHelper.DrawRect(spriteBatch, badgeRect, hovered ? BadgeHoverColor : BadgeBackgroundColor);
+                UIDrawHelper.DrawBorder(spriteBatch, badgeRect, BadgeBorderColor, 1);
 
-                spriteBatch.Draw(texture, center, frame, Color.White, 0f,
-                    frame.Size() / 2f, scale, SpriteEffects.None, 0f);
+                if (station.HasDisplayItem)
+                {
+                    UIItemRenderingHelper.TryDrawItemIcon(spriteBatch, station.ItemId, badgeRect.Center.ToVector2(), 18f);
+                    return;
+                }
+
+                string text = TruncateTextToWidth(station.DisplayName, badgeRect.Width - 12f, FallbackScale);
+                Vector2 textSize = FontAssets.MouseText.Value.MeasureString(text) * FallbackScale;
+                Vector2 textPosition = new(
+                    badgeRect.X + (badgeRect.Width - textSize.X) * 0.5f,
+                    badgeRect.Y + (badgeRect.Height - textSize.Y) * 0.5f);
+                Utils.DrawBorderString(spriteBatch, text, textPosition, FallbackTextColor, FallbackScale);
+            }
+
+            private static void ApplyHover(StationDisplayInfo station)
+            {
+                if (station.HasDisplayItem &&
+                    UIItemRenderingHelper.TryCreateDisplayItem(station.ItemId, out Item hoverItem))
+                {
+                    Main.HoverItem = hoverItem.Clone();
+                }
+
+                Main.hoverItemName = station.DisplayName;
+            }
+
+            private static string TruncateTextToWidth(string text, float maxWidth, float scale)
+            {
+                if (string.IsNullOrEmpty(text))
+                    return string.Empty;
+
+                Vector2 size = FontAssets.MouseText.Value.MeasureString(text) * scale;
+                if (size.X <= maxWidth)
+                    return text;
+
+                string truncated = text;
+                while (truncated.Length > 1)
+                {
+                    truncated = truncated[..^1];
+                    string candidate = truncated + "...";
+                    if (FontAssets.MouseText.Value.MeasureString(candidate).X * scale <= maxWidth)
+                        return candidate;
+                }
+
+                return text;
             }
         }
 
         /// <summary>
         /// Text-only tree line that draws ancestor continuation lines with pixel-based indentation.
-        /// Used for crafting station info, conditions, and alternative recipe buttons.
+        /// Used for conditions.
         /// </summary>
         private class UITreeTextLine : UIElement
         {
@@ -545,8 +712,10 @@ namespace SteroidGuide.Common.UI
 
                 // Content starts after tree area
                 float contentX = x + (_depth + 1) * DepthIndent;
-                Utils.DrawBorderString(spriteBatch, _text, new Vector2(contentX, centerY - 8f), _color, _scale);
+                Vector2 textPosition = GetCenteredBorderStringPosition(_text, contentX, centerY, _scale);
+                Utils.DrawBorderString(spriteBatch, _text, textPosition, _color, _scale);
             }
         }
+
     }
 }

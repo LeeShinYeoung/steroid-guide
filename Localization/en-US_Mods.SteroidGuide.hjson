@@ -3,18 +3,55 @@ NPCs: {
 		DisplayName: Steroid Guide
 
 		TownNPCMood: {
-			Content: I am content.
-			NoHome: I hate not having a home.
-			FarFromHome: I am too far from home.
-			LoveSpace: I love having so much space.
-			DislikeCrowded: I dislike how crowded I am.
-			HateCrowded: I hate how crowded I am.
-			LikeBiome: I like {BiomeName}.
-			DislikeBiome: I dislike {BiomeName}.
-			LikeNPC: I like {NPCName}.
-			DislikeNPC: I dislike {NPCName}.
-			LikeNPC_Princess: I like {NPCName}.
+			Content: Feeling strong. Nothing to complain about.
+			NoHome: I can survive without a roof, but even I need a place to come back to.
+			FarFromHome: I've wandered too far. A man should know where he belongs.
+			LoveSpace: Plenty of room. A man needs space to breathe.
+			DislikeCrowded: Too many people around here. I can barely think straight.
+			HateCrowded: I can't stand this. Everyone's in everyone's way.
+			LikeBiome: The air in {BiomeName} is clean and honest. I like that.
+			DislikeBiome: Not a fan of {BiomeName}. Nothing solid to stand on out here.
+			LikeNPC: I respect {NPCName}. That one knows how to carry their own weight.
+			DislikeNPC: "{NPCName} relies too much on things that aren't their own strength."
+			HateNPC: "I can't stand {NPCName}. The world doesn't need decoration, it needs backbone."
+			LikeNPC_Princess: I respect {NPCName}. That one knows how to carry their own weight.
 			Princess_LovesNPC: I like {NPCName}.
 		}
+
+		Chat: {
+			Standard1: Open your chests. I'll handle the rest.
+			Standard2: You look like you've been through a lot. Good. That's how you grow.
+			Standard3: A blade doesn't make the warrior. The warrior makes the blade worth holding.
+			Standard4: Don't ask for the easy path. Ask for the strength to walk the hard one.
+			GuidePresent: "My brother {0} talks too much. But his heart's in the right place."
+			BloodMoon: Monsters aren't the problem. Fear is. Stand your ground.
+			Rain: The world rests when it rains. You should too.
+			HardMode: The world got harder. Good. You weren't built for easy.
+			MoonLord: Moon Lord's down. Respect. But the grind never stops.
+			PlayerDied: "Everyone falls, {0}. Not everyone gets back up. You did."
+		}
+
+		Bestiary: A guide who has transcended ordinary recipe knowledge. He analyzes your entire inventory to reveal the most powerful items you can craft.
+		CraftableButton: Craftable
+	}
+}
+
+UI: {
+	NearbyChestStatusSingular: Referencing {0} nearby chest
+	NearbyChestStatusPlural: Referencing {0} nearby chests
+	SearchPlaceholder: Search craftable items...
+	SearchNoResults: No craftable items match the current query.
+	NoCraftableItems: No craftable items found.
+	NoItemsInCategory: No craftable items match the selected category.
+	Filters: {
+		All: All
+		Weapons: Weapons
+		Armor: Armor
+		Accessories: Accessories
+		Tools: Tools
+		Consumables: Consumables
+		Placeables: Placeables
+		Materials: Materials
+		Misc: Misc
 	}
 }
