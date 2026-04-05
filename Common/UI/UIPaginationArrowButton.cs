@@ -42,8 +42,8 @@ namespace SteroidGuide.Common.UI
                 ? (IsMouseHovering ? Color.White : new Color(230, 230, 230))
                 : new Color(140, 140, 140);
 
-            DrawRect(spriteBatch, bounds, backgroundColor);
-            DrawBorder(spriteBatch, bounds, borderColor, 1);
+            UIDrawHelper.DrawRect(spriteBatch, bounds, backgroundColor);
+            UIDrawHelper.DrawBorder(spriteBatch, bounds, borderColor, 1);
             DrawArrow(spriteBatch, bounds, arrowColor);
         }
 
@@ -63,7 +63,7 @@ namespace SteroidGuide.Common.UI
                     ? glyphX + ArrowWidth - rowWidth
                     : glyphX;
 
-                DrawRect(spriteBatch, new Rectangle(rowX, glyphY + row, rowWidth, 1), color);
+                UIDrawHelper.DrawRect(spriteBatch, new Rectangle(rowX, glyphY + row, rowWidth, 1), color);
             }
         }
 
@@ -78,18 +78,6 @@ namespace SteroidGuide.Common.UI
             return width;
         }
 
-        private static void DrawRect(SpriteBatch spriteBatch, Rectangle rectangle, Color color)
-        {
-            spriteBatch.Draw(TextureAssets.MagicPixel.Value, rectangle, color);
-        }
-
-        private static void DrawBorder(SpriteBatch spriteBatch, Rectangle rectangle, Color color, int thickness)
-        {
-            DrawRect(spriteBatch, new Rectangle(rectangle.X, rectangle.Y, rectangle.Width, thickness), color);
-            DrawRect(spriteBatch, new Rectangle(rectangle.X, rectangle.Bottom - thickness, rectangle.Width, thickness), color);
-            DrawRect(spriteBatch, new Rectangle(rectangle.X, rectangle.Y, thickness, rectangle.Height), color);
-            DrawRect(spriteBatch, new Rectangle(rectangle.Right - thickness, rectangle.Y, thickness, rectangle.Height), color);
-        }
 
     }
 }

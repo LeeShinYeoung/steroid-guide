@@ -47,8 +47,8 @@ namespace SteroidGuide.Common.UI
                 ? new Color(180, 205, 255)
                 : new Color(90, 110, 150);
 
-            spriteBatch.Draw(TextureAssets.MagicPixel.Value, bounds, backgroundColor);
-            DrawBorder(spriteBatch, bounds, borderColor, 2);
+            UIDrawHelper.DrawRect(spriteBatch, bounds, backgroundColor);
+            UIDrawHelper.DrawBorder(spriteBatch, bounds, borderColor, 2);
 
             bool drawPlaceholder = string.IsNullOrEmpty(_text);
             float maxTextWidth = Math.Max(0f, dims.Width - HorizontalPadding * 2f);
@@ -189,15 +189,6 @@ namespace SteroidGuide.Common.UI
             }
 
             return candidate;
-        }
-
-        private static void DrawBorder(SpriteBatch spriteBatch, Rectangle rect, Color color, int thickness)
-        {
-            Texture2D pixel = TextureAssets.MagicPixel.Value;
-            spriteBatch.Draw(pixel, new Rectangle(rect.X, rect.Y, rect.Width, thickness), color);
-            spriteBatch.Draw(pixel, new Rectangle(rect.X, rect.Bottom - thickness, rect.Width, thickness), color);
-            spriteBatch.Draw(pixel, new Rectangle(rect.X, rect.Y, thickness, rect.Height), color);
-            spriteBatch.Draw(pixel, new Rectangle(rect.Right - thickness, rect.Y, thickness, rect.Height), color);
         }
     }
 }

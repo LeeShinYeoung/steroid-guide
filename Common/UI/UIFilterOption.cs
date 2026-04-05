@@ -68,13 +68,13 @@ namespace SteroidGuide.Common.UI
                     ? new Color(182, 194, 236)
                     : new Color(148, 160, 206);
 
-            DrawRect(spriteBatch, rowBounds, backgroundColor);
-            DrawRect(spriteBatch, new Rectangle(rowBounds.X, rowBounds.Y, RowAccentWidth, rowBounds.Height), accentColor);
-            DrawRect(spriteBatch, new Rectangle(rowBounds.X, rowBounds.Bottom - 1, rowBounds.Width, 1), separatorColor);
+            UIDrawHelper.DrawRect(spriteBatch, rowBounds, backgroundColor);
+            UIDrawHelper.DrawRect(spriteBatch, new Rectangle(rowBounds.X, rowBounds.Y, RowAccentWidth, rowBounds.Height), accentColor);
+            UIDrawHelper.DrawRect(spriteBatch, new Rectangle(rowBounds.X, rowBounds.Bottom - 1, rowBounds.Width, 1), separatorColor);
 
             if (_selected || IsMouseHovering)
             {
-                DrawBorder(spriteBatch, rowBounds, borderColor, 1);
+                UIDrawHelper.DrawBorder(spriteBatch, rowBounds, borderColor, 1);
             }
 
             var indicatorRect = new Rectangle(
@@ -83,14 +83,14 @@ namespace SteroidGuide.Common.UI
                 IndicatorSize,
                 IndicatorSize);
 
-            DrawRect(spriteBatch, indicatorRect, new Color(24, 29, 48, 230));
-            DrawBorder(spriteBatch, indicatorRect, indicatorBorderColor, IndicatorBorderThickness);
+            UIDrawHelper.DrawRect(spriteBatch, indicatorRect, new Color(24, 29, 48, 230));
+            UIDrawHelper.DrawBorder(spriteBatch, indicatorRect, indicatorBorderColor, IndicatorBorderThickness);
 
             if (_selected)
             {
                 Rectangle fillRect = indicatorRect;
                 fillRect.Inflate(-4, -4);
-                DrawRect(spriteBatch, fillRect, new Color(255, 220, 120));
+                UIDrawHelper.DrawRect(spriteBatch, fillRect, new Color(255, 220, 120));
             }
 
             Vector2 labelSize = FontAssets.MouseText.Value.MeasureString(_label) * TextScale;
@@ -98,19 +98,6 @@ namespace SteroidGuide.Common.UI
                 rowBounds.X + LabelLeftPadding,
                 rowBounds.Y + (rowBounds.Height - labelSize.Y) * 0.5f);
             Utils.DrawBorderString(spriteBatch, _label, labelPosition, textColor, TextScale);
-        }
-
-        private static void DrawRect(SpriteBatch spriteBatch, Rectangle rectangle, Color color)
-        {
-            spriteBatch.Draw(TextureAssets.MagicPixel.Value, rectangle, color);
-        }
-
-        private static void DrawBorder(SpriteBatch spriteBatch, Rectangle rectangle, Color color, int thickness)
-        {
-            DrawRect(spriteBatch, new Rectangle(rectangle.X, rectangle.Y, rectangle.Width, thickness), color);
-            DrawRect(spriteBatch, new Rectangle(rectangle.X, rectangle.Bottom - thickness, rectangle.Width, thickness), color);
-            DrawRect(spriteBatch, new Rectangle(rectangle.X, rectangle.Y, thickness, rectangle.Height), color);
-            DrawRect(spriteBatch, new Rectangle(rectangle.Right - thickness, rectangle.Y, thickness, rectangle.Height), color);
         }
     }
 }

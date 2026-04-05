@@ -615,11 +615,8 @@ namespace SteroidGuide.Common.UI
 
             private static void DrawStationBadge(SpriteBatch spriteBatch, StationDisplayInfo station, Rectangle badgeRect, bool hovered)
             {
-                DrawFramedBox(
-                    spriteBatch,
-                    badgeRect,
-                    hovered ? BadgeHoverColor : BadgeBackgroundColor,
-                    BadgeBorderColor);
+                UIDrawHelper.DrawRect(spriteBatch, badgeRect, hovered ? BadgeHoverColor : BadgeBackgroundColor);
+                UIDrawHelper.DrawBorder(spriteBatch, badgeRect, BadgeBorderColor, 1);
 
                 if (station.HasDisplayItem)
                 {
@@ -644,17 +641,6 @@ namespace SteroidGuide.Common.UI
                 }
 
                 Main.hoverItemName = station.DisplayName;
-            }
-
-            private static void DrawFramedBox(SpriteBatch spriteBatch, Rectangle rect, Color backgroundColor, Color borderColor)
-            {
-                Texture2D pixel = TextureAssets.MagicPixel.Value;
-                spriteBatch.Draw(pixel, rect, backgroundColor);
-
-                spriteBatch.Draw(pixel, new Rectangle(rect.X, rect.Y, rect.Width, 1), borderColor);
-                spriteBatch.Draw(pixel, new Rectangle(rect.X, rect.Bottom - 1, rect.Width, 1), borderColor);
-                spriteBatch.Draw(pixel, new Rectangle(rect.X, rect.Y, 1, rect.Height), borderColor);
-                spriteBatch.Draw(pixel, new Rectangle(rect.Right - 1, rect.Y, 1, rect.Height), borderColor);
             }
 
             private static string TruncateTextToWidth(string text, float maxWidth, float scale)

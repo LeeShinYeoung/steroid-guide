@@ -107,12 +107,12 @@ namespace SteroidGuide.Common.UI
                     ? new Color(70, 70, 130, 220)
                     : new Color(35, 35, 60, 200);
 
-                spriteBatch.Draw(TextureAssets.MagicPixel.Value, cellRect, bgColor);
+                UIDrawHelper.DrawRect(spriteBatch, cellRect, bgColor);
 
                 // Draw border for selected item
                 if (itemId == _selectedItemId)
                 {
-                    DrawBorder(spriteBatch, cellRect, Color.Gold, 2);
+                    UIDrawHelper.DrawBorder(spriteBatch, cellRect, Color.Gold, 2);
                 }
 
                 // Draw item icon (centered horizontally, shifted up to leave room for name)
@@ -132,12 +132,12 @@ namespace SteroidGuide.Common.UI
                         Math.Min(bgColor.G + 30, 255),
                         Math.Min(bgColor.B + 30, 255),
                         bgColor.A);
-                    spriteBatch.Draw(TextureAssets.MagicPixel.Value, cellRect, hoverBg);
+                    UIDrawHelper.DrawRect(spriteBatch, cellRect, hoverBg);
 
                     // Thin highlight border (1px, light gray) — distinct from the gold selected border
                     if (itemId != _selectedItemId)
                     {
-                        DrawBorder(spriteBatch, cellRect, new Color(180, 180, 180, 200), 1);
+                        UIDrawHelper.DrawBorder(spriteBatch, cellRect, new Color(180, 180, 180, 200), 1);
                     }
 
                     if (UIItemRenderingHelper.TryCreateDisplayItem(itemId, out Item hoverItem))
@@ -235,19 +235,6 @@ namespace SteroidGuide.Common.UI
         private static void DrawItemIcon(SpriteBatch spriteBatch, int itemId, Vector2 center)
         {
             UIItemRenderingHelper.TryDrawItemIcon(spriteBatch, itemId, center, 32f);
-        }
-
-        private static void DrawBorder(SpriteBatch spriteBatch, Rectangle rect, Color color, int thickness)
-        {
-            var pixel = TextureAssets.MagicPixel.Value;
-            // Top
-            spriteBatch.Draw(pixel, new Rectangle(rect.X, rect.Y, rect.Width, thickness), color);
-            // Bottom
-            spriteBatch.Draw(pixel, new Rectangle(rect.X, rect.Bottom - thickness, rect.Width, thickness), color);
-            // Left
-            spriteBatch.Draw(pixel, new Rectangle(rect.X, rect.Y, thickness, rect.Height), color);
-            // Right
-            spriteBatch.Draw(pixel, new Rectangle(rect.Right - thickness, rect.Y, thickness, rect.Height), color);
         }
     }
 }

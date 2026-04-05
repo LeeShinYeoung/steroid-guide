@@ -39,9 +39,9 @@ namespace SteroidGuide.Common.UI
                 ? Color.White
                 : new Color(228, 234, 252);
 
-            DrawRect(spriteBatch, bounds, backgroundColor);
-            DrawRect(spriteBatch, innerBounds, innerFillColor);
-            DrawBorder(spriteBatch, bounds, borderColor, BorderThickness);
+            UIDrawHelper.DrawRect(spriteBatch, bounds, backgroundColor);
+            UIDrawHelper.DrawRect(spriteBatch, innerBounds, innerFillColor);
+            UIDrawHelper.DrawBorder(spriteBatch, bounds, borderColor, BorderThickness);
             DrawCloseIcon(spriteBatch, bounds, iconColor);
         }
 
@@ -60,26 +60,14 @@ namespace SteroidGuide.Common.UI
                 int leftX = glyphX + offset;
                 int rightX = glyphX + glyphWidth - offset - IconStrokeWidth;
 
-                DrawRect(spriteBatch, new Rectangle(leftX, rowY, IconStrokeWidth, 1), color);
+                UIDrawHelper.DrawRect(spriteBatch, new Rectangle(leftX, rowY, IconStrokeWidth, 1), color);
                 if (rightX > leftX)
                 {
-                    DrawRect(spriteBatch, new Rectangle(rightX, rowY, IconStrokeWidth, 1), color);
+                    UIDrawHelper.DrawRect(spriteBatch, new Rectangle(rightX, rowY, IconStrokeWidth, 1), color);
                 }
             }
         }
 
-        private static void DrawRect(SpriteBatch spriteBatch, Rectangle rectangle, Color color)
-        {
-            spriteBatch.Draw(TextureAssets.MagicPixel.Value, rectangle, color);
-        }
-
-        private static void DrawBorder(SpriteBatch spriteBatch, Rectangle rectangle, Color color, int thickness)
-        {
-            DrawRect(spriteBatch, new Rectangle(rectangle.X, rectangle.Y, rectangle.Width, thickness), color);
-            DrawRect(spriteBatch, new Rectangle(rectangle.X, rectangle.Bottom - thickness, rectangle.Width, thickness), color);
-            DrawRect(spriteBatch, new Rectangle(rectangle.X, rectangle.Y, thickness, rectangle.Height), color);
-            DrawRect(spriteBatch, new Rectangle(rectangle.Right - thickness, rectangle.Y, thickness, rectangle.Height), color);
-        }
 
     }
 }

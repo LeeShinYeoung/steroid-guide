@@ -64,9 +64,9 @@ namespace SteroidGuide.Common.UI
                     ? new Color(238, 242, 255)
                     : new Color(220, 225, 245);
 
-            DrawRect(spriteBatch, bounds, backgroundColor);
-            DrawRect(spriteBatch, new Rectangle(bounds.X, bounds.Y, AccentWidth, bounds.Height), accentColor);
-            DrawBorder(spriteBatch, bounds, borderColor, 1);
+            UIDrawHelper.DrawRect(spriteBatch, bounds, backgroundColor);
+            UIDrawHelper.DrawRect(spriteBatch, new Rectangle(bounds.X, bounds.Y, AccentWidth, bounds.Height), accentColor);
+            UIDrawHelper.DrawBorder(spriteBatch, bounds, borderColor, 1);
 
             DrawSortIcon(spriteBatch, bounds, iconColor);
 
@@ -86,22 +86,9 @@ namespace SteroidGuide.Common.UI
             for (int i = 0; i < widths.Length; i++)
             {
                 int y = centerY - IconGap + i * IconGap;
-                DrawRect(spriteBatch, new Rectangle(x, y, IconDotSize, IconDotSize), color);
-                DrawRect(spriteBatch, new Rectangle(x + IconDotSize + 2, y, widths[i], IconLineHeight), color);
+                UIDrawHelper.DrawRect(spriteBatch, new Rectangle(x, y, IconDotSize, IconDotSize), color);
+                UIDrawHelper.DrawRect(spriteBatch, new Rectangle(x + IconDotSize + 2, y, widths[i], IconLineHeight), color);
             }
-        }
-
-        private static void DrawRect(SpriteBatch spriteBatch, Rectangle rectangle, Color color)
-        {
-            spriteBatch.Draw(TextureAssets.MagicPixel.Value, rectangle, color);
-        }
-
-        private static void DrawBorder(SpriteBatch spriteBatch, Rectangle rectangle, Color color, int thickness)
-        {
-            DrawRect(spriteBatch, new Rectangle(rectangle.X, rectangle.Y, rectangle.Width, thickness), color);
-            DrawRect(spriteBatch, new Rectangle(rectangle.X, rectangle.Bottom - thickness, rectangle.Width, thickness), color);
-            DrawRect(spriteBatch, new Rectangle(rectangle.X, rectangle.Y, thickness, rectangle.Height), color);
-            DrawRect(spriteBatch, new Rectangle(rectangle.Right - thickness, rectangle.Y, thickness, rectangle.Height), color);
         }
     }
 }
