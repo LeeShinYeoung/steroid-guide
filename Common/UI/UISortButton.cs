@@ -8,7 +8,8 @@ namespace SteroidGuide.Common.UI
 {
     public class UISortButton : UIElement
     {
-        private const float TextScale = 0.72f;
+        private const float TextScale = 0.70f;
+        private const float TextVerticalOffset = 2f;
         private const int AccentWidth = 4;
         private const int IconLineHeight = 2;
         private const int IconDotSize = 3;
@@ -73,7 +74,7 @@ namespace SteroidGuide.Common.UI
             Vector2 labelSize = FontAssets.MouseText.Value.MeasureString(_label) * TextScale;
             Vector2 labelPosition = new(
                 bounds.X + LabelLeftPadding,
-                bounds.Y + (bounds.Height - labelSize.Y) * 0.5f);
+                bounds.Y + (bounds.Height - labelSize.Y) * 0.5f + TextVerticalOffset);
             Utils.DrawBorderString(spriteBatch, _label, labelPosition, textColor, TextScale);
         }
 
@@ -85,7 +86,7 @@ namespace SteroidGuide.Common.UI
 
             for (int i = 0; i < widths.Length; i++)
             {
-                int y = centerY - IconGap + i * IconGap;
+                int y = centerY - IconGap - 1 + i * IconGap;
                 UIDrawHelper.DrawRect(spriteBatch, new Rectangle(x, y, IconDotSize, IconDotSize), color);
                 UIDrawHelper.DrawRect(spriteBatch, new Rectangle(x + IconDotSize + 2, y, widths[i], IconLineHeight), color);
             }

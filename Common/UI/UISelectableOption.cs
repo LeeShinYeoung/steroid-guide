@@ -12,12 +12,13 @@ namespace SteroidGuide.Common.UI
         private readonly string _label;
         private bool _selected;
 
-        private const float TextScale = 0.75f;
+        private const float TextScale = 0.70f;
+        private const float TextVerticalOffset = 2f;
         private const int IndicatorSize = 12;
         private const int IndicatorBorderThickness = 2;
         private const int RowAccentWidth = 4;
         private const float IndicatorLeftPadding = 10f;
-        private const float LabelLeftPadding = 32f;
+        private const float LabelLeftPadding = 28f;
 
         public UISelectableOption(string label)
         {
@@ -96,7 +97,7 @@ namespace SteroidGuide.Common.UI
             Vector2 labelSize = FontAssets.MouseText.Value.MeasureString(_label) * TextScale;
             Vector2 labelPosition = new(
                 rowBounds.X + LabelLeftPadding,
-                rowBounds.Y + (rowBounds.Height - labelSize.Y) * 0.5f);
+                rowBounds.Y + (rowBounds.Height - labelSize.Y) * 0.5f + TextVerticalOffset);
             Utils.DrawBorderString(spriteBatch, _label, labelPosition, textColor, TextScale);
         }
     }

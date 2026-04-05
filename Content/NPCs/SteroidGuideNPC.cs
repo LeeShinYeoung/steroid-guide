@@ -39,9 +39,12 @@ namespace SteroidGuide.Content.NPCs
 
             NPC.Happiness
                 .SetBiomeAffection<ForestBiome>(AffectionLevel.Like)
-                .SetBiomeAffection<SnowBiome>(AffectionLevel.Dislike)
+                .SetBiomeAffection<OceanBiome>(AffectionLevel.Dislike)
                 .SetNPCAffection(NPCID.Guide, AffectionLevel.Like)
-                .SetNPCAffection(NPCID.ArmsDealer, AffectionLevel.Dislike);
+                .SetNPCAffection(NPCID.Clothier, AffectionLevel.Like)
+                .SetNPCAffection(NPCID.BestiaryGirl, AffectionLevel.Like)
+                .SetNPCAffection(NPCID.Steampunker, AffectionLevel.Dislike)
+                .SetNPCAffection(NPCID.Painter, AffectionLevel.Hate);
 
             NPCID.Sets.NPCBestiaryDrawModifiers value = new()
             {
