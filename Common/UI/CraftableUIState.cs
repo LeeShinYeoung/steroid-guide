@@ -12,9 +12,7 @@ namespace SteroidGuide.Common.UI
     public enum SortCriteria
     {
         Rarity,
-        Name,
-        Value,
-        RecipeDepth
+        Name
     }
 
     public partial class CraftableUIState : UIState
@@ -71,7 +69,6 @@ namespace SteroidGuide.Common.UI
         private AnalysisResult _analysisResult;
         private ScanResult? _latestScanResult;
         private readonly Dictionary<int, CachedItemProps> _itemPropsCache = new();
-        private readonly Dictionary<int, int> _recipeDepthCache = new();
         private List<int> _filteredItems = new();
         private int _currentPage;
         private int _totalPages = 1;

@@ -54,18 +54,13 @@ namespace SteroidGuide.Common.UI
         private void RebuildItemPropsCache()
         {
             _itemPropsCache.Clear();
-            _recipeDepthCache.Clear();
             if (_analysisResult == null) return;
 
-            var graph = RecipeGraphSystem.Graph;
             foreach (int itemId in _analysisResult.TopTierItems)
             {
                 var item = new Item();
                 item.SetDefaults(itemId);
                 _itemPropsCache[itemId] = new CachedItemProps(item);
-
-                if (graph != null)
-                    _recipeDepthCache[itemId] = CraftableAnalyzer.GetRecipeDepth(itemId, graph);
             }
         }
 

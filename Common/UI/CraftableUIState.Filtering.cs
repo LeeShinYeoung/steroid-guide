@@ -66,7 +66,7 @@ namespace SteroidGuide.Common.UI
 
         private static string GetSortLabel(SortCriteria sort)
         {
-            return sort == SortCriteria.RecipeDepth ? "Recipe Depth" : sort.ToString();
+            return sort.ToString();
         }
 
         private void OnSearchTextChanged(string query)
@@ -114,18 +114,6 @@ namespace SteroidGuide.Common.UI
                     {
                         int cmp = string.Compare(propsA.NormalizedName, propsB.NormalizedName, StringComparison.Ordinal);
                         return cmp != 0 ? cmp : a.CompareTo(b);
-                    }
-                    case SortCriteria.Value:
-                    {
-                        int cmp = propsB.Value.CompareTo(propsA.Value);
-                        return cmp != 0 ? cmp : a.CompareTo(b);
-                    }
-                    case SortCriteria.RecipeDepth:
-                    {
-                        _recipeDepthCache.TryGetValue(a, out int depthA);
-                        _recipeDepthCache.TryGetValue(b, out int depthB);
-                        int cmp = depthB.CompareTo(depthA);
-                        return cmp != 0 ? cmp : propsB.Rare.CompareTo(propsA.Rare);
                     }
                     default:
                         return 0;

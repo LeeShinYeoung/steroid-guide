@@ -73,38 +73,6 @@ namespace SteroidGuide.Common
             return result;
         }
 
-        public static int GetRecipeDepth(int itemId, RecipeGraphData graph, HashSet<int> visiting = null)
-        {
-            visiting ??= new HashSet<int>();
-
-            if (visiting.Contains(itemId))
-                return 0;
-
-            if (!graph.RecipesByResult.TryGetValue(itemId, out var recipes))
-                return 0;
-
-            visiting.Add(itemId);
-            int maxDepth = 0;
-
-            foreach (var recipe in recipes)
-            {
-                int recipeMax = 0;
-                foreach (var ingredient in recipe.requiredItem)
-                {
-                    if (ingredient.type <= ItemID.None)
-                        continue;
-                    int childDepth = GetRecipeDepth(ingredient.type, graph, visiting);
-                    if (childDepth > recipeMax)
-                        recipeMax = childDepth;
-                }
-                if (recipeMax > maxDepth)
-                    maxDepth = recipeMax;
-            }
-
-            visiting.Remove(itemId);
-            return maxDepth + 1;
-        }
-
         public static RecipeTreeNode BuildRecipeTree(int itemId, int needed,
             RecipeGraphData graph, Dictionary<int, int> available, HashSet<int> visiting = null,
             bool ignoreOwnedForCurrentNode = false)
