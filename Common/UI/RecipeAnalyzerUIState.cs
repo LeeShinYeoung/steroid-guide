@@ -46,13 +46,13 @@ namespace SteroidGuide.Common.UI
 
         // Filter
         private FilterCategory _currentFilter = FilterCategory.All;
-        private readonly Dictionary<FilterCategory, UIFilterOption> _filterButtons = new();
+        private readonly Dictionary<FilterCategory, UISelectableOption> _filterButtons = new();
 
         // Sort
         private SortCriteria _currentSort = SortCriteria.Rarity;
         private UISortButton _sortButton;
         private UIElement _sortDropdownPanel;
-        private readonly Dictionary<SortCriteria, UISortOption> _sortOptions = new();
+        private readonly Dictionary<SortCriteria, UISelectableOption> _sortOptions = new();
         private bool _sortDropdownOpen;
 
         // Search
@@ -149,7 +149,7 @@ namespace SteroidGuide.Common.UI
             float filterY = 0f;
             foreach (var filterDefinition in FilterDefinitions)
             {
-                var btn = new UIFilterOption(ResolveLocalizedText(filterDefinition.LabelKey, filterDefinition.FallbackLabel));
+                var btn = new UISelectableOption(ResolveLocalizedText(filterDefinition.LabelKey, filterDefinition.FallbackLabel));
                 btn.Top.Set(filterY, 0f);
                 var captured = filterDefinition.Category;
                 btn.OnLeftClick += (evt, el) => SetFilter(captured);
@@ -178,7 +178,7 @@ namespace SteroidGuide.Common.UI
             float sortY = 0f;
             foreach (SortCriteria sort in Enum.GetValues(typeof(SortCriteria)))
             {
-                var option = new UISortOption(GetSortLabel(sort));
+                var option = new UISelectableOption(GetSortLabel(sort));
                 option.Top.Set(sortY, 0f);
                 var captured = sort;
                 option.OnLeftClick += (evt, el) => SelectSort(captured);

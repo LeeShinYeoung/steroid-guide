@@ -7,8 +7,11 @@ using Terraria.UI;
 
 namespace SteroidGuide.Common.UI
 {
-    public class UISortOption : UIElement
+    public class UISelectableOption : UIElement
     {
+        private readonly string _label;
+        private bool _selected;
+
         private const float TextScale = 0.75f;
         private const int IndicatorSize = 12;
         private const int IndicatorBorderThickness = 2;
@@ -16,10 +19,7 @@ namespace SteroidGuide.Common.UI
         private const float IndicatorLeftPadding = 10f;
         private const float LabelLeftPadding = 32f;
 
-        private readonly string _label;
-        private bool _selected;
-
-        public UISortOption(string label)
+        public UISelectableOption(string label)
         {
             _label = label;
             Width.Set(0f, 1f);
