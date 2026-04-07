@@ -1,12 +1,12 @@
 Items you can craft right now — recipes of recipes of recipes. It traces them all to the end.
 
-[h2]Full Crafting Path[/h2]
+[h3]Full Crafting Path[/h3]
 The core of this mod. It lists final items that require multiple crafting steps, and clicking one unfolds the entire chain down to raw materials in a tree structure. Each material shows how many you have and how many you need, so you know exactly what togather.
 
-[h2]Auto Scan[/h2]
+[h3]Auto Scan[/h3]
 Talk to the NPC and it automatically analyzes your inventory and nearby chests. No need to open chests one by one — it evaluates craftability based on everything you have. The number of chests being referenced is displayed on screen.
 
-[h2]Filter & Search[/h2]
+[h3]Filter & Search[/h3]
 Filter by category — weapons, armor, accessories, tools, consumables, placeables, materials, and more. Sort by rarity or name, and search by item name to quickly find what you're looking for.
 
 [i]He answers before you ask.[/i]
