@@ -1,5 +1,4 @@
 bin/
 obj/
 .omc/
-.agents
-.harness
+settings.json
