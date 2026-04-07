@@ -39,6 +39,11 @@ namespace SteroidGuide.Common.UI
             CraftableInterface = null;
         }
 
+        public override void OnWorldUnload()
+        {
+            ItemScanner.ClearSyncState();
+        }
+
         public void ShowUI(int npcIndex = -1)
         {
             _isVisible = true;
@@ -85,6 +90,9 @@ namespace SteroidGuide.Common.UI
 
         public override void UpdateUI(GameTime gameTime)
         {
+            if (Main.netMode == NetmodeID.MultiplayerClient)
+                ItemScanner.UpdateFrame();
+
             if (_pendingChatClose)
             {
                 _pendingChatClose = false;
