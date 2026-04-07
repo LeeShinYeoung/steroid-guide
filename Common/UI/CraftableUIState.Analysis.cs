@@ -28,6 +28,17 @@ namespace SteroidGuide.Common.UI
             ApplyScanResult(ItemScanner.ScanAvailableItems(Main.LocalPlayer), forceAnalysis: true);
         }
 
+        private void RunAnalysisFromLatestScan()
+        {
+            if (!_latestScanResult.HasValue) return;
+            var graph = RecipeGraphSystem.Graph;
+            if (graph == null || _latestScanResult.Value.Items == null) return;
+
+            _analysisResult = CraftableAnalyzer.Analyze(graph, _latestScanResult.Value.Items);
+            RebuildItemPropsCache();
+            ApplyFilter();
+        }
+
         private void ApplyScanResult(ScanResult scanResult, bool forceAnalysis = false)
         {
             bool itemsChanged = forceAnalysis ||

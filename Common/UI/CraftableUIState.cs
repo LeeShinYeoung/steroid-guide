@@ -74,6 +74,9 @@ namespace SteroidGuide.Common.UI
         private int _totalPages = 1;
         private int _selectedItemId = -1;
         private int _updateCounter;
+        private bool _analysisPending;
+        private int _analysisDebounceTimer;
+        private const int AnalysisDebounceFrames = 30;
         private int ItemsPerPage => _itemGrid?.ItemsPerPage ?? 20;
         private const float MainPanelWidth = 820f;
         private const float MainPanelHeight = 600f;
@@ -268,6 +271,8 @@ namespace SteroidGuide.Common.UI
             _searchQuery = string.Empty;
             SetSortDropdownOpen(false);
             _sortButton?.SetState(GetSortLabel(_currentSort), _sortDropdownOpen);
+            _analysisPending = false;
+            _analysisDebounceTimer = 0;
             _searchTextBox?.Reset();
             _recipeTree?.ClearTree();
             UpdateFilterSelectionStates();
@@ -279,18 +284,29 @@ namespace SteroidGuide.Common.UI
         {
             base.Update(gameTime);
 
-            // Throttle inventory change detection to every ~30 frames
             _updateCounter++;
             if (_updateCounter % 30 == 0 && Main.LocalPlayer != null)
             {
                 var scanResult = ItemScanner.ScanAvailableItems(Main.LocalPlayer);
                 if (HasScanChanged(scanResult))
                 {
-                    ApplyScanResult(scanResult);
+                    _latestScanResult = scanResult;
+                    UpdateNearbyChestStatusText(scanResult.ChestCount);
+                    _analysisPending = true;
+                    _analysisDebounceTimer = AnalysisDebounceFrames;
                 }
             }
 
-            // Block world interaction when hovering our panel
+            if (_analysisPending)
+            {
+                _analysisDebounceTimer--;
+                if (_analysisDebounceTimer <= 0)
+                {
+                    _analysisPending = false;
+                    RunAnalysisFromLatestScan();
+                }
+            }
+
             if (IsMouseOverMainPanel)
             {
                 Main.LocalPlayer.mouseInterface = true;
