@@ -107,7 +107,7 @@ namespace SteroidGuide.Common.UI
                 {
                     case SortCriteria.Rarity:
                     {
-                        int cmp = propsB.Rare.CompareTo(propsA.Rare);
+                        int cmp = propsB.RarityScore.CompareTo(propsA.RarityScore);
                         return cmp != 0 ? cmp : a.CompareTo(b);
                     }
                     case SortCriteria.Name:
