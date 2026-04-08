@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using Terraria;
 using Terraria.ID;
@@ -31,23 +32,58 @@ namespace SteroidGuide.Common
 
     public static class CraftableAnalyzer
     {
+        private struct DictSnapshot
+        {
+            public (int Key, int Value)[] Entries;
+            public int Count;
+
+            public DictSnapshot(Dictionary<int, int> dict)
+            {
+                Entries = ArrayPool<(int, int)>.Shared.Rent(dict.Count);
+                Count = 0;
+                foreach (var kv in dict)
+                    Entries[Count++] = (kv.Key, kv.Value);
+            }
+
+            public void Restore(Dictionary<int, int> dict)
+            {
+                dict.Clear();
+                for (int i = 0; i < Count; i++)
+                    dict[Entries[i].Key] = Entries[i].Value;
+            }
+
+            public void Return()
+            {
+                if (Entries != null)
+                {
+                    ArrayPool<(int, int)>.Shared.Return(Entries);
+                    Entries = null;
+                }
+            }
+        }
+
         public static AnalysisResult Analyze(RecipeGraphData graph, Dictionary<int, int> available)
         {
             var result = new AnalysisResult();
             var noRecipeCache = new HashSet<int>();
 
+            var original = new DictSnapshot(available);
+            var working = new Dictionary<int, int>(available);
+
             foreach (var itemId in graph.RecipesByResult.Keys)
             {
                 var visiting = new HashSet<int>();
-                // Each top-level item gets its own copy so items are independently evaluated
-                var availableCopy = new Dictionary<int, int>(available);
-                var node = TraverseRecipes(itemId, 1, graph, availableCopy, visiting,
+                original.Restore(working);
+
+                var node = TraverseRecipes(itemId, 1, graph, working, visiting,
                     noRecipeCache, consumeAvailable: true, ignoreOwnedForCurrentNode: true);
                 if (node.Status != NodeStatus.Missing)
                 {
                     result.AllCraftable.Add(itemId);
                 }
             }
+
+            original.Return();
 
             // Filter to top-tier: craftable items not used as ingredient for another craftable item
             foreach (var itemId in result.AllCraftable)
@@ -139,7 +175,7 @@ namespace SteroidGuide.Common
             foreach (var recipe in recipes)
             {
                 // Save state for rollback in analysis mode
-                var saved = consumeAvailable ? new Dictionary<int, int>(available) : null;
+                DictSnapshot? saved = consumeAvailable ? new DictSnapshot(available) : null;
 
                 if (consumeAvailable && usableOwned > 0)
                     available[itemId] = 0;
@@ -167,18 +203,17 @@ namespace SteroidGuide.Common
 
                 if (canMake)
                 {
+                    saved?.Return();
                     node.Status = NodeStatus.Craftable;
                     node.UsedRecipe = recipe;
                     node.Children = children;
                     foundViable = true;
                     break;
                 }
-                else if (consumeAvailable && saved != null)
+                else if (consumeAvailable && saved.HasValue)
                 {
-                    // Rollback: restore available to saved state
-                    available.Clear();
-                    foreach (var kv in saved)
-                        available[kv.Key] = kv.Value;
+                    saved.Value.Restore(available);
+                    saved.Value.Return();
                 }
             }
 

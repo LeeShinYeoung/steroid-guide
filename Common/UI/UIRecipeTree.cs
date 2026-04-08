@@ -55,6 +55,11 @@ namespace SteroidGuide.Common.UI
             ShowPlaceholder();
         }
 
+        public static void ClearCaches()
+        {
+            TileDisplayItemCache.Clear();
+        }
+
         public void ClearTree()
         {
             _currentRoot = null;

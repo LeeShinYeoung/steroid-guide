@@ -70,17 +70,6 @@ namespace SteroidGuide.Content.NPCs
             AnimationType = VanillaGuideType;
         }
 
-        public override bool PreAI()
-        {
-            var uiSystem = ModContent.GetInstance<CraftableUISystem>();
-            if (uiSystem != null && uiSystem.IsVisible && uiSystem.TalkingNpcIndex == NPC.whoAmI)
-            {
-                NPC.velocity = Microsoft.Xna.Framework.Vector2.Zero;
-                return false;
-            }
-            return true;
-        }
-
         public override void SetBestiary(BestiaryDatabase database, BestiaryEntry bestiaryEntry)
         {
             bestiaryEntry.Info.AddRange(new IBestiaryInfoElement[]

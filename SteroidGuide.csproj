@@ -9,8 +9,8 @@
     <BuildMod>false</BuildMod>
   </PropertyGroup>
   <PropertyGroup>
-    <TModLoaderTargetsPath Condition="Exists('../../../tModLoader/tMLMod.targets')">../../../tModLoader/tMLMod.targets</TModLoaderTargetsPath>
-    <TModLoaderTargetsPath Condition="'$(TModLoaderTargetsPath)' == '' and Exists('../../../../../tModLoader/tMLMod.targets')">../../../../../tModLoader/tMLMod.targets</TModLoaderTargetsPath>
+    <TModLoaderPath>$(HOME)/Library/Application Support/Steam/steamapps/common/tModLoader</TModLoaderPath>
+    <TModLoaderTargetsPath Condition="Exists('$(TModLoaderPath)/tMLMod.targets')">$(TModLoaderPath)/tMLMod.targets</TModLoaderTargetsPath>
   </PropertyGroup>
   <Import Project="$(TModLoaderTargetsPath)" Condition="'$(TModLoaderTargetsPath)' != ''" />
 </Project>
