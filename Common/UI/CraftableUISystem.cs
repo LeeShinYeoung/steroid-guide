@@ -61,6 +61,10 @@ namespace SteroidGuide.Common.UI
             _isVisible = false;
             _escWasDown = false;
             _enterWasDown = false;
+            if (_talkingNpcIndex >= 0)
+            {
+                Main.player[Main.myPlayer].SetTalkNPC(-1);
+            }
             _talkingNpcIndex = -1;
             CraftableInterface?.SetState(null);
         }
@@ -97,7 +101,6 @@ namespace SteroidGuide.Common.UI
             if (_pendingChatClose)
             {
                 _pendingChatClose = false;
-                Main.player[Main.myPlayer].SetTalkNPC(-1);
                 Main.npcChatText = "";
             }
 
@@ -134,6 +137,13 @@ namespace SteroidGuide.Common.UI
             }
             _escWasDown = escDown;
 
+            // If vanilla cleared talkNPC independently (e.g., vanilla distance check), close our UI
+            if (_talkingNpcIndex >= 0 && Main.player[Main.myPlayer].talkNPC != _talkingNpcIndex)
+            {
+                HideUI();
+                return;
+            }
+
             // Auto-close if player is too far from the NPC
             if (_talkingNpcIndex >= 0 && _talkingNpcIndex < Main.maxNPCs && Main.LocalPlayer != null)
             {
@@ -157,6 +167,13 @@ namespace SteroidGuide.Common.UI
 
         public override void ModifyInterfaceLayers(List<GameInterfaceLayer> layers)
         {
+            if (_isVisible)
+            {
+                int chatIndex = layers.FindIndex(layer => layer.Name.Equals("Vanilla: NPC / Sign Dialog"));
+                if (chatIndex != -1)
+                    layers.RemoveAt(chatIndex);
+            }
+
             int mouseTextIndex = layers.FindIndex(layer => layer.Name.Equals("Vanilla: Mouse Text"));
             if (mouseTextIndex != -1)
             {

@@ -110,8 +110,9 @@ SteroidGuide/
 
 - NPC uses vanilla Guide animations (`AnimationType = VanillaGuideType`)
 - Chat button "Craftable" → `CraftableUISystem.ShowUI(NPC.whoAmI)`
-- NPC freezes while UI open: `PreAI` returns false when `uiSystem.IsVisible && TalkingNpcIndex == NPC.whoAmI`
-- Auto-close UI if player moves >300px from NPC
+- NPC freezes while UI open via vanilla `talkNPC` mechanism (server-synced, multiplayer-safe)
+- `CraftableUISystem` keeps `talkNPC` set while custom UI is visible, suppresses vanilla chat layer
+- Auto-close UI if player moves >300px from NPC, or if vanilla clears `talkNPC` independently
 - `ModPlayer` tracks death for 60s (`DeathDialogueDuration = 3600 frames`) for special dialogue
 
 ## Data Flow
