@@ -21,7 +21,7 @@ namespace SteroidGuide.Common
     {
         private const float ScanRange = 60f * 16f;
         private const float ScanRangeSq = ScanRange * ScanRange;
-        private const int MaxRequestsPerScan = 8;
+        private const int MaxRequestsPerScan = 32;
         private const int ChestSyncTTLFrames = 3600; // 60s at 60fps
 
         private static readonly Dictionary<int, int> _syncedChestTimestamps = new();
