@@ -225,16 +225,44 @@ namespace SteroidGuide.Common.UI
             }
         }
 
-        private void UpdateNearbyChestStatusText(int chestCount)
+        private enum NearbyChestStatus { Idle, Syncing, Waiting, Analyzing }
+
+        private void RefreshNearbyChestStatusText()
         {
-            _nearbyChestStatusText?.SetText(ResolveNearbyChestStatusText(chestCount));
+            int chestCount = _latestScanResult?.ChestCount ?? 0;
+            int syncedCount = _latestScanResult?.SyncedChestCount ?? 0;
+            var status = DetermineNearbyChestStatus(chestCount, syncedCount);
+            string text = ResolveNearbyChestStatusText(chestCount, syncedCount, status);
+            if (text != _lastStatusText)
+            {
+                _nearbyChestStatusText?.SetText(text);
+                _lastStatusText = text;
+            }
         }
 
-        private static string ResolveNearbyChestStatusText(int chestCount)
+        private NearbyChestStatus DetermineNearbyChestStatus(int chestCount, int syncedCount)
         {
-            string key = chestCount == 1 ? NearbyChestStatusSingularKey : NearbyChestStatusPluralKey;
-            string fallback = chestCount == 1 ? NearbyChestStatusSingularFallback : NearbyChestStatusPluralFallback;
-            return ResolveLocalizedText(key, fallback, chestCount);
+            if (_pendingAnalysisTask != null) return NearbyChestStatus.Analyzing;
+            if (chestCount > 0 && syncedCount < chestCount) return NearbyChestStatus.Syncing;
+            if (_analysisPending) return NearbyChestStatus.Waiting;
+            return NearbyChestStatus.Idle;
+        }
+
+        private static string ResolveNearbyChestStatusText(int chestCount, int syncedCount, NearbyChestStatus status)
+        {
+            switch (status)
+            {
+                case NearbyChestStatus.Analyzing:
+                    return ResolveLocalizedText(NearbyChestStatusAnalyzingKey, NearbyChestStatusAnalyzingFallback, chestCount);
+                case NearbyChestStatus.Syncing:
+                    return ResolveLocalizedText(NearbyChestStatusSyncingKey, NearbyChestStatusSyncingFallback, chestCount, syncedCount);
+                case NearbyChestStatus.Waiting:
+                    return ResolveLocalizedText(NearbyChestStatusWaitingKey, NearbyChestStatusWaitingFallback, chestCount);
+                default:
+                    string key = chestCount == 1 ? NearbyChestStatusSingularKey : NearbyChestStatusPluralKey;
+                    string fallback = chestCount == 1 ? NearbyChestStatusSingularFallback : NearbyChestStatusPluralFallback;
+                    return ResolveLocalizedText(key, fallback, chestCount);
+            }
         }
 
         private static string ResolveLocalizedText(string key, string fallback)

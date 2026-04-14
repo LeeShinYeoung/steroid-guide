@@ -15,6 +15,7 @@ namespace SteroidGuide.Common
     {
         public Dictionary<int, int> Items;
         public int ChestCount;
+        public int SyncedChestCount;
     }
 
     public static class ItemScanner
@@ -62,6 +63,7 @@ namespace SteroidGuide.Common
         {
             var items = new Dictionary<int, int>();
             int chestCount = 0;
+            int syncedChestCount = 0;
 
             // Player inventory slots 0-57 (hotbar + inventory + coins + ammo)
             for (int i = 0; i < 58; i++)
@@ -107,6 +109,9 @@ namespace SteroidGuide.Common
                     continue;
                 }
 
+                // Singleplayer chests are always usable; multiplayer synced chests reach this branch.
+                syncedChestCount++;
+
                 foreach (var item in chest.item)
                 {
                     if (item != null && item.type > ItemID.None && item.stack > 0)
@@ -117,7 +122,12 @@ namespace SteroidGuide.Common
                 }
             }
 
-            return new ScanResult { Items = items, ChestCount = chestCount };
+            return new ScanResult
+            {
+                Items = items,
+                ChestCount = chestCount,
+                SyncedChestCount = syncedChestCount
+            };
         }
     }
 }

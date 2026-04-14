@@ -23,6 +23,12 @@ namespace SteroidGuide.Common.UI
         private const string NearbyChestStatusSingularFallback = "Referencing {0} nearby chest";
         private const string NearbyChestStatusPluralKey = "Mods.SteroidGuide.UI.NearbyChestStatusPlural";
         private const string NearbyChestStatusPluralFallback = "Referencing {0} nearby chests";
+        private const string NearbyChestStatusSyncingKey = "Mods.SteroidGuide.UI.NearbyChestStatusSyncing";
+        private const string NearbyChestStatusSyncingFallback = "Referencing {0} nearby chests (syncing {1}/{0})";
+        private const string NearbyChestStatusWaitingKey = "Mods.SteroidGuide.UI.NearbyChestStatusWaiting";
+        private const string NearbyChestStatusWaitingFallback = "Referencing {0} nearby chests · queued for update";
+        private const string NearbyChestStatusAnalyzingKey = "Mods.SteroidGuide.UI.NearbyChestStatusAnalyzing";
+        private const string NearbyChestStatusAnalyzingFallback = "Referencing {0} nearby chests · analyzing...";
         private const string SearchPlaceholderKey = "Mods.SteroidGuide.UI.SearchPlaceholder";
         private const string SearchPlaceholderFallback = "Search craftable items...";
 
@@ -41,6 +47,7 @@ namespace SteroidGuide.Common.UI
 
         private UIPanel _mainPanel;
         private UIText _nearbyChestStatusText;
+        private string _lastStatusText;
 
         // Filter
         private FilterCategory _currentFilter = FilterCategory.All;
@@ -133,7 +140,7 @@ namespace SteroidGuide.Common.UI
             };
             _mainPanel.Append(closeButton);
 
-            _nearbyChestStatusText = new UIText(ResolveNearbyChestStatusText(0), 0.8f);
+            _nearbyChestStatusText = new UIText(ResolveNearbyChestStatusText(0, 0, NearbyChestStatus.Idle), 0.8f);
             _nearbyChestStatusText.Top.Set(10f, 0f);
             _nearbyChestStatusText.Left.Set(8f, 0f);
             _mainPanel.Append(_nearbyChestStatusText);
@@ -289,7 +296,7 @@ namespace SteroidGuide.Common.UI
             _searchTextBox?.Reset();
             _recipeTree?.ClearTree();
             UpdateFilterSelectionStates();
-            UpdateNearbyChestStatusText(0);
+            _lastStatusText = null;
             RunAnalysis();
         }
 
@@ -304,7 +311,6 @@ namespace SteroidGuide.Common.UI
                 if (HasScanChanged(scanResult))
                 {
                     _latestScanResult = scanResult;
-                    UpdateNearbyChestStatusText(scanResult.ChestCount);
                     _analysisPending = true;
                     _analysisDebounceTimer = AnalysisDebounceFrames;
                 }
@@ -342,6 +348,8 @@ namespace SteroidGuide.Common.UI
                     _ = task.Exception; // observe to prevent UnobservedTaskException
                 }
             }
+
+            RefreshNearbyChestStatusText();
 
             if (IsMouseOverMainPanel)
             {

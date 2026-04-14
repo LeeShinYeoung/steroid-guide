@@ -39,6 +39,9 @@ NPCs: {
 UI: {
 	NearbyChestStatusSingular: Referencing {0} nearby chest
 	NearbyChestStatusPlural: Referencing {0} nearby chests
+	NearbyChestStatusSyncing: Referencing {0} nearby chests (syncing {1}/{0})
+	NearbyChestStatusWaiting: Referencing {0} nearby chests · queued for update
+	NearbyChestStatusAnalyzing: Referencing {0} nearby chests · analyzing...
 	SearchPlaceholder: Search craftable items...
 	SearchNoResults: No craftable items match the current query.
 	NoCraftableItems: No craftable items found.
