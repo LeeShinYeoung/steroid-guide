@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Xna.Framework;
 using SteroidGuide.Common;
 using Terraria;
@@ -76,7 +78,9 @@ namespace SteroidGuide.Common.UI
         private int _updateCounter;
         private bool _analysisPending;
         private int _analysisDebounceTimer;
-        private const int AnalysisDebounceFrames = 30;
+        private const int AnalysisDebounceFrames = 90;
+        private Task<AnalysisResult> _pendingAnalysisTask;
+        private CancellationTokenSource _analysisCts;
         private int ItemsPerPage => _itemGrid?.ItemsPerPage ?? 20;
         private const float MainPanelWidth = 820f;
         private const float MainPanelHeight = 600f;
@@ -261,8 +265,17 @@ namespace SteroidGuide.Common.UI
             return filterBottom + Math.Max(0f, (gapHeight - SidebarRowHeight) * 0.5f);
         }
 
+        public void CancelPendingAnalysis()
+        {
+            _analysisCts?.Cancel();
+            _analysisCts?.Dispose();
+            _analysisCts = null;
+            _pendingAnalysisTask = null;
+        }
+
         public void OnShow()
         {
+            CancelPendingAnalysis();
             _latestScanResult = null;
             _analysisResult = null;
             _selectedItemId = -1;
@@ -304,6 +317,29 @@ namespace SteroidGuide.Common.UI
                 {
                     _analysisPending = false;
                     RunAnalysisFromLatestScan();
+                }
+            }
+
+            if (_pendingAnalysisTask != null && _pendingAnalysisTask.IsCompleted)
+            {
+                var task = _pendingAnalysisTask;
+                _pendingAnalysisTask = null;
+                var system = ModContent.GetInstance<CraftableUISystem>();
+                bool isVisible = system?.IsVisible ?? false;
+                if (isVisible && task.Status == TaskStatus.RanToCompletion)
+                {
+                    _analysisResult = task.Result;
+                    RebuildItemPropsCache();
+                    ApplyFilter();
+                }
+                else if (task.IsFaulted && task.Exception != null)
+                {
+                    ModContent.GetInstance<SteroidGuideMod>()?.Logger
+                        .Error("Craftable analysis task faulted", task.Exception.GetBaseException());
+                }
+                else
+                {
+                    _ = task.Exception; // observe to prevent UnobservedTaskException
                 }
             }
 

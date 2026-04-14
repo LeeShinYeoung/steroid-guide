@@ -43,6 +43,7 @@ namespace SteroidGuide.Common.UI
         public override void OnWorldUnload()
         {
             ItemScanner.ClearSyncState();
+            CraftableState?.CancelPendingAnalysis();
         }
 
         public void ShowUI(int npcIndex = -1)
@@ -59,6 +60,7 @@ namespace SteroidGuide.Common.UI
         public void HideUI()
         {
             _isVisible = false;
+            CraftableState?.CancelPendingAnalysis();
             _escWasDown = false;
             _enterWasDown = false;
             if (_talkingNpcIndex >= 0)

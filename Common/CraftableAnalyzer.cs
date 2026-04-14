@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Threading;
 using Terraria;
 using Terraria.ID;
 
@@ -62,28 +63,35 @@ namespace SteroidGuide.Common
             }
         }
 
-        public static AnalysisResult Analyze(RecipeGraphData graph, Dictionary<int, int> available)
+        public static AnalysisResult Analyze(RecipeGraphData graph, Dictionary<int, int> available, CancellationToken ct = default)
         {
             var result = new AnalysisResult();
             var noRecipeCache = new HashSet<int>();
 
             var original = new DictSnapshot(available);
-            var working = new Dictionary<int, int>(available);
-
-            foreach (var itemId in graph.RecipesByResult.Keys)
+            try
             {
-                var visiting = new HashSet<int>();
-                original.Restore(working);
+                var working = new Dictionary<int, int>(available);
 
-                var node = TraverseRecipes(itemId, 1, graph, working, visiting,
-                    noRecipeCache, consumeAvailable: true, ignoreOwnedForCurrentNode: true);
-                if (node.Status != NodeStatus.Missing)
+                foreach (var itemId in graph.RecipesByResult.Keys)
                 {
-                    result.AllCraftable.Add(itemId);
+                    ct.ThrowIfCancellationRequested();
+
+                    var visiting = new HashSet<int>();
+                    original.Restore(working);
+
+                    var node = TraverseRecipes(itemId, 1, graph, working, visiting,
+                        noRecipeCache, consumeAvailable: true, ct, ignoreOwnedForCurrentNode: true);
+                    if (node.Status != NodeStatus.Missing)
+                    {
+                        result.AllCraftable.Add(itemId);
+                    }
                 }
             }
-
-            original.Return();
+            finally
+            {
+                original.Return();
+            }
 
             // Filter to top-tier: craftable items not used as ingredient for another craftable item
             foreach (var itemId in result.AllCraftable)
@@ -115,7 +123,7 @@ namespace SteroidGuide.Common
         {
             visiting ??= new HashSet<int>();
             return TraverseRecipes(itemId, needed, graph, available, visiting,
-                noRecipeCache: null, consumeAvailable: false, ignoreOwnedForCurrentNode);
+                noRecipeCache: null, consumeAvailable: false, ct: default, ignoreOwnedForCurrentNode);
         }
 
         /// <summary>
@@ -128,8 +136,11 @@ namespace SteroidGuide.Common
             Dictionary<int, int> available, HashSet<int> visiting,
             HashSet<int> noRecipeCache,
             bool consumeAvailable,
+            CancellationToken ct,
             bool ignoreOwnedForCurrentNode = false)
         {
+            ct.ThrowIfCancellationRequested();
+
             available.TryGetValue(itemId, out int ownedCount);
             var node = new RecipeTreeNode
             {
@@ -176,44 +187,56 @@ namespace SteroidGuide.Common
             {
                 // Save state for rollback in analysis mode
                 DictSnapshot? saved = consumeAvailable ? new DictSnapshot(available) : null;
-
-                if (consumeAvailable && usableOwned > 0)
-                    available[itemId] = 0;
-
-                int batchSize = Math.Max(1, recipe.createItem.stack);
-                int batches = (remaining + batchSize - 1) / batchSize;
-
-                var children = new List<RecipeTreeNode>();
-                bool canMake = true;
-
-                foreach (var ingredient in recipe.requiredItem)
+                bool snapshotReturned = false;
+                try
                 {
-                    if (ingredient.type <= ItemID.None)
-                        continue;
-                    int ingredientNeeded = ingredient.stack * batches;
-                    var child = TraverseRecipes(ingredient.type, ingredientNeeded, graph,
-                        available, visiting, noRecipeCache, consumeAvailable);
-                    children.Add(child);
-                    if (child.Status == NodeStatus.Missing)
+                    if (consumeAvailable && usableOwned > 0)
+                        available[itemId] = 0;
+
+                    int batchSize = Math.Max(1, recipe.createItem.stack);
+                    int batches = (remaining + batchSize - 1) / batchSize;
+
+                    var children = new List<RecipeTreeNode>();
+                    bool canMake = true;
+
+                    foreach (var ingredient in recipe.requiredItem)
                     {
-                        canMake = false;
-                        if (consumeAvailable) break;
+                        if (ingredient.type <= ItemID.None)
+                            continue;
+                        int ingredientNeeded = ingredient.stack * batches;
+                        var child = TraverseRecipes(ingredient.type, ingredientNeeded, graph,
+                            available, visiting, noRecipeCache, consumeAvailable, ct);
+                        children.Add(child);
+                        if (child.Status == NodeStatus.Missing)
+                        {
+                            canMake = false;
+                            if (consumeAvailable) break;
+                        }
+                    }
+
+                    if (canMake)
+                    {
+                        saved?.Return();
+                        snapshotReturned = true;
+                        node.Status = NodeStatus.Craftable;
+                        node.UsedRecipe = recipe;
+                        node.Children = children;
+                        foundViable = true;
+                        break;
+                    }
+                    else if (consumeAvailable && saved.HasValue)
+                    {
+                        saved.Value.Restore(available);
+                        saved.Value.Return();
+                        snapshotReturned = true;
                     }
                 }
-
-                if (canMake)
+                finally
                 {
-                    saved?.Return();
-                    node.Status = NodeStatus.Craftable;
-                    node.UsedRecipe = recipe;
-                    node.Children = children;
-                    foundViable = true;
-                    break;
-                }
-                else if (consumeAvailable && saved.HasValue)
-                {
-                    saved.Value.Restore(available);
-                    saved.Value.Return();
+                    if (!snapshotReturned && saved.HasValue)
+                    {
+                        saved.Value.Return();
+                    }
                 }
             }
 
@@ -236,7 +259,7 @@ namespace SteroidGuide.Common
                             continue;
                         int ingredientNeeded = ingredient.stack * batches;
                         node.Children.Add(TraverseRecipes(ingredient.type, ingredientNeeded, graph,
-                            available, visiting, noRecipeCache, consumeAvailable));
+                            available, visiting, noRecipeCache, consumeAvailable, ct));
                     }
                 }
             }
