@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Xna.Framework;
 using SteroidGuide.Common;
 using Terraria;
@@ -21,6 +23,12 @@ namespace SteroidGuide.Common.UI
         private const string NearbyChestStatusSingularFallback = "Referencing {0} nearby chest";
         private const string NearbyChestStatusPluralKey = "Mods.SteroidGuide.UI.NearbyChestStatusPlural";
         private const string NearbyChestStatusPluralFallback = "Referencing {0} nearby chests";
+        private const string NearbyChestStatusSyncingKey = "Mods.SteroidGuide.UI.NearbyChestStatusSyncing";
+        private const string NearbyChestStatusSyncingFallback = "Referencing {0} nearby chests (syncing {1}/{0})";
+        private const string NearbyChestStatusWaitingKey = "Mods.SteroidGuide.UI.NearbyChestStatusWaiting";
+        private const string NearbyChestStatusWaitingFallback = "Referencing {0} nearby chests · queued for update";
+        private const string NearbyChestStatusAnalyzingKey = "Mods.SteroidGuide.UI.NearbyChestStatusAnalyzing";
+        private const string NearbyChestStatusAnalyzingFallback = "Referencing {0} nearby chests · analyzing...";
         private const string SearchPlaceholderKey = "Mods.SteroidGuide.UI.SearchPlaceholder";
         private const string SearchPlaceholderFallback = "Search craftable items...";
 
@@ -39,6 +47,7 @@ namespace SteroidGuide.Common.UI
 
         private UIPanel _mainPanel;
         private UIText _nearbyChestStatusText;
+        private string _lastStatusText;
 
         // Filter
         private FilterCategory _currentFilter = FilterCategory.All;
@@ -76,7 +85,9 @@ namespace SteroidGuide.Common.UI
         private int _updateCounter;
         private bool _analysisPending;
         private int _analysisDebounceTimer;
-        private const int AnalysisDebounceFrames = 30;
+        private const int AnalysisDebounceFrames = 90;
+        private Task<AnalysisResult> _pendingAnalysisTask;
+        private CancellationTokenSource _analysisCts;
         private int ItemsPerPage => _itemGrid?.ItemsPerPage ?? 20;
         private const float MainPanelWidth = 820f;
         private const float MainPanelHeight = 600f;
@@ -129,7 +140,7 @@ namespace SteroidGuide.Common.UI
             };
             _mainPanel.Append(closeButton);
 
-            _nearbyChestStatusText = new UIText(ResolveNearbyChestStatusText(0), 0.8f);
+            _nearbyChestStatusText = new UIText(ResolveNearbyChestStatusText(0, 0, NearbyChestStatus.Idle), 0.8f);
             _nearbyChestStatusText.Top.Set(10f, 0f);
             _nearbyChestStatusText.Left.Set(8f, 0f);
             _mainPanel.Append(_nearbyChestStatusText);
@@ -261,8 +272,17 @@ namespace SteroidGuide.Common.UI
             return filterBottom + Math.Max(0f, (gapHeight - SidebarRowHeight) * 0.5f);
         }
 
+        public void CancelPendingAnalysis()
+        {
+            _analysisCts?.Cancel();
+            _analysisCts?.Dispose();
+            _analysisCts = null;
+            _pendingAnalysisTask = null;
+        }
+
         public void OnShow()
         {
+            CancelPendingAnalysis();
             _latestScanResult = null;
             _analysisResult = null;
             _selectedItemId = -1;
@@ -276,7 +296,7 @@ namespace SteroidGuide.Common.UI
             _searchTextBox?.Reset();
             _recipeTree?.ClearTree();
             UpdateFilterSelectionStates();
-            UpdateNearbyChestStatusText(0);
+            _lastStatusText = null;
             RunAnalysis();
         }
 
@@ -291,7 +311,6 @@ namespace SteroidGuide.Common.UI
                 if (HasScanChanged(scanResult))
                 {
                     _latestScanResult = scanResult;
-                    UpdateNearbyChestStatusText(scanResult.ChestCount);
                     _analysisPending = true;
                     _analysisDebounceTimer = AnalysisDebounceFrames;
                 }
@@ -306,6 +325,31 @@ namespace SteroidGuide.Common.UI
                     RunAnalysisFromLatestScan();
                 }
             }
+
+            if (_pendingAnalysisTask != null && _pendingAnalysisTask.IsCompleted)
+            {
+                var task = _pendingAnalysisTask;
+                _pendingAnalysisTask = null;
+                var system = ModContent.GetInstance<CraftableUISystem>();
+                bool isVisible = system?.IsVisible ?? false;
+                if (isVisible && task.Status == TaskStatus.RanToCompletion)
+                {
+                    _analysisResult = task.Result;
+                    RebuildItemPropsCache();
+                    ApplyFilter();
+                }
+                else if (task.IsFaulted && task.Exception != null)
+                {
+                    ModContent.GetInstance<SteroidGuideMod>()?.Logger
+                        .Error("Craftable analysis task faulted", task.Exception.GetBaseException());
+                }
+                else
+                {
+                    _ = task.Exception; // observe to prevent UnobservedTaskException
+                }
+            }
+
+            RefreshNearbyChestStatusText();
 
             if (IsMouseOverMainPanel)
             {

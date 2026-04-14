@@ -15,7 +15,7 @@ namespace SteroidGuide.Common
         }
 
         private static readonly Queue<PendingChestSync> _queue = new();
-        private const int MaxPacketsPerFrame = 40;
+        private const int MaxPacketsPerFrame = 80;
 
         public static void Enqueue(int chestIndex, int toClient)
         {

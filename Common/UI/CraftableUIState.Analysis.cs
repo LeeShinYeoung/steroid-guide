@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using SteroidGuide.Common;
 using Terraria;
 using Terraria.ID;
@@ -63,41 +65,35 @@ namespace SteroidGuide.Common.UI
         private void RunAnalysis()
         {
             if (Main.LocalPlayer == null) return;
-            ApplyScanResult(ItemScanner.ScanAvailableItems(Main.LocalPlayer), forceAnalysis: true);
+            DispatchAnalysis(ItemScanner.ScanAvailableItems(Main.LocalPlayer));
         }
 
         private void RunAnalysisFromLatestScan()
         {
             if (!_latestScanResult.HasValue) return;
-            var graph = RecipeGraphSystem.Graph;
-            if (graph == null || _latestScanResult.Value.Items == null) return;
-
-            _analysisResult = CraftableAnalyzer.Analyze(graph, _latestScanResult.Value.Items);
-            RebuildItemPropsCache();
-            ApplyFilter();
+            DispatchAnalysis(_latestScanResult.Value);
         }
 
-        private void ApplyScanResult(ScanResult scanResult, bool forceAnalysis = false)
+        private void DispatchAnalysis(ScanResult scanResult)
         {
-            bool itemsChanged = forceAnalysis ||
-                _analysisResult == null ||
-                !_latestScanResult.HasValue ||
-                !DictEquals(_latestScanResult.Value.Items, scanResult.Items);
-
-            _latestScanResult = scanResult;
-            UpdateNearbyChestStatusText(scanResult.ChestCount);
-
-            if (!itemsChanged)
-            {
-                return;
-            }
-
             var graph = RecipeGraphSystem.Graph;
             if (graph == null || scanResult.Items == null) return;
 
-            _analysisResult = CraftableAnalyzer.Analyze(graph, scanResult.Items);
-            RebuildItemPropsCache();
-            ApplyFilter();
+            var oldCts = _analysisCts;
+            _analysisCts = new CancellationTokenSource();
+            oldCts?.Cancel();
+            oldCts?.Dispose();
+            var token = _analysisCts.Token;
+
+            // ItemScanner.ScanAvailableItems returns a fresh dict per call. CraftableAnalyzer.Analyze
+            // snapshots `available` internally and mutates only its own working copy — the input dict
+            // is left untouched, so main-thread reads of _latestScanResult.Value.Items (e.g. HasScanChanged
+            // and BuildRecipeTree for recipe tree display) are safe while the task runs.
+            var items = scanResult.Items;
+
+            _pendingAnalysisTask = Task.Run(
+                () => CraftableAnalyzer.Analyze(graph, items, token),
+                token);
         }
 
         private void RebuildItemPropsCache()
