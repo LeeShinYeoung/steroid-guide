@@ -25,8 +25,6 @@ namespace SteroidGuide.Common.UI
         private const string NearbyChestStatusPluralFallback = "Referencing {0} nearby chests";
         private const string NearbyChestStatusSyncingKey = "Mods.SteroidGuide.UI.NearbyChestStatusSyncing";
         private const string NearbyChestStatusSyncingFallback = "Referencing {0} nearby chests (syncing {1}/{0})";
-        private const string NearbyChestStatusWaitingKey = "Mods.SteroidGuide.UI.NearbyChestStatusWaiting";
-        private const string NearbyChestStatusWaitingFallback = "Referencing {0} nearby chests · queued for update";
         private const string NearbyChestStatusAnalyzingKey = "Mods.SteroidGuide.UI.NearbyChestStatusAnalyzing";
         private const string NearbyChestStatusAnalyzingFallback = "Referencing {0} nearby chests · analyzing...";
         private const string SearchPlaceholderKey = "Mods.SteroidGuide.UI.SearchPlaceholder";
@@ -83,9 +81,6 @@ namespace SteroidGuide.Common.UI
         private int _totalPages = 1;
         private int _selectedItemId = -1;
         private int _updateCounter;
-        private bool _analysisPending;
-        private int _analysisDebounceTimer;
-        private const int AnalysisDebounceFrames = 90;
         private Task<AnalysisResult> _pendingAnalysisTask;
         private CancellationTokenSource _analysisCts;
         private int ItemsPerPage => _itemGrid?.ItemsPerPage ?? 20;
@@ -291,8 +286,6 @@ namespace SteroidGuide.Common.UI
             _searchQuery = string.Empty;
             SetSortDropdownOpen(false);
             _sortButton?.SetState(GetSortLabel(_currentSort), _sortDropdownOpen);
-            _analysisPending = false;
-            _analysisDebounceTimer = 0;
             _searchTextBox?.Reset();
             _recipeTree?.ClearTree();
             UpdateFilterSelectionStates();
@@ -311,17 +304,6 @@ namespace SteroidGuide.Common.UI
                 if (HasScanChanged(scanResult))
                 {
                     _latestScanResult = scanResult;
-                    _analysisPending = true;
-                    _analysisDebounceTimer = AnalysisDebounceFrames;
-                }
-            }
-
-            if (_analysisPending)
-            {
-                _analysisDebounceTimer--;
-                if (_analysisDebounceTimer <= 0)
-                {
-                    _analysisPending = false;
                     RunAnalysisFromLatestScan();
                 }
             }

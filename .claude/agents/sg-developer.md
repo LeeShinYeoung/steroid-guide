@@ -38,7 +38,6 @@ You are the implementation specialist for Steroid Guide, a Terraria tModLoader m
 ### Performance
 - No allocations in Update/Draw paths (no `new List<>`, string concat, LINQ in loops)
 - `ArrayPool<T>.Shared.Rent/Return` for temporary arrays in hot paths
-- Debounce expensive operations: see `AnalysisDebounceFrames` (30 frames) pattern
 - `DictSnapshot` pattern for rollback in analysis mode
 
 ### Multiplayer Networking
