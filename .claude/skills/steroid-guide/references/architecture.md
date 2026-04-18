@@ -98,11 +98,9 @@ SteroidGuide/
 
 **Rendering:** Every UI element draws itself via `DrawSelf(SpriteBatch)` using `TextureAssets.MagicPixel` stretched into rectangles. No texture files for UI components.
 
-**Analysis debounce:**
+**Analysis trigger:**
 - Scan runs every 30 frames in `Update`
-- If scan result changed: set `_analysisPending = true`, reset `_analysisDebounceTimer = 30`
-- Timer counts down each frame; at 0, runs `RunAnalysisFromLatestScan()`
-- Prevents rapid re-analysis during multiplayer chest sync bursts
+- If scan result changed: immediately calls `RunAnalysisFromLatestScan()` (runs on background thread via `Task.Run`, previous analysis cancelled via `CancellationToken`)
 
 ### 4. Content Layer
 

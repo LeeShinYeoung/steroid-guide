@@ -225,7 +225,7 @@ namespace SteroidGuide.Common.UI
             }
         }
 
-        private enum NearbyChestStatus { Idle, Syncing, Waiting, Analyzing }
+        private enum NearbyChestStatus { Idle, Syncing, Analyzing }
 
         private void RefreshNearbyChestStatusText()
         {
@@ -244,7 +244,6 @@ namespace SteroidGuide.Common.UI
         {
             if (_pendingAnalysisTask != null) return NearbyChestStatus.Analyzing;
             if (chestCount > 0 && syncedCount < chestCount) return NearbyChestStatus.Syncing;
-            if (_analysisPending) return NearbyChestStatus.Waiting;
             return NearbyChestStatus.Idle;
         }
 
@@ -256,8 +255,6 @@ namespace SteroidGuide.Common.UI
                     return ResolveLocalizedText(NearbyChestStatusAnalyzingKey, NearbyChestStatusAnalyzingFallback, chestCount);
                 case NearbyChestStatus.Syncing:
                     return ResolveLocalizedText(NearbyChestStatusSyncingKey, NearbyChestStatusSyncingFallback, chestCount, syncedCount);
-                case NearbyChestStatus.Waiting:
-                    return ResolveLocalizedText(NearbyChestStatusWaitingKey, NearbyChestStatusWaitingFallback, chestCount);
                 default:
                     string key = chestCount == 1 ? NearbyChestStatusSingularKey : NearbyChestStatusPluralKey;
                     string fallback = chestCount == 1 ? NearbyChestStatusSingularFallback : NearbyChestStatusPluralFallback;
