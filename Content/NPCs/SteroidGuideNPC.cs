@@ -24,10 +24,10 @@ namespace SteroidGuide.Content.NPCs
 
         public override void SetStaticDefaults()
         {
-            Main.npcFrameCount[Type] = Main.npcFrameCount[VanillaGuideType];
-            NPCID.Sets.ExtraFramesCount[Type] = NPCID.Sets.ExtraFramesCount[VanillaGuideType];
-            NPCID.Sets.AttackFrameCount[Type] = NPCID.Sets.AttackFrameCount[VanillaGuideType];
-            NPCID.Sets.HatOffsetY[Type] = NPCID.Sets.HatOffsetY[VanillaGuideType];
+            Main.npcFrameCount[Type] = 25;
+            NPCID.Sets.ExtraFramesCount[Type] = 9;
+            NPCID.Sets.AttackFrameCount[Type] = 4;
+            NPCID.Sets.HatOffsetY[Type] = 4;
             NPCID.Sets.DangerDetectRange[Type] = 700;
             NPCID.Sets.AttackType[Type] = 0;
             NPCID.Sets.AttackTime[Type] = 90;
