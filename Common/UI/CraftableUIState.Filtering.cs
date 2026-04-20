@@ -75,6 +75,23 @@ namespace SteroidGuide.Common.UI
             ApplyFilter();
         }
 
+        private bool MatchesSearchQuery(CachedItemProps props, string normalizedQuery)
+        {
+            if (props.NormalizedName.Contains(normalizedQuery, StringComparison.Ordinal))
+                return true;
+
+            if (props.VisibleIngredientIds == null)
+                return false;
+
+            foreach (int ingredientId in props.VisibleIngredientIds)
+            {
+                if (_ingredientNameCache.TryGetValue(ingredientId, out string ingredientName)
+                    && ingredientName.Contains(normalizedQuery, StringComparison.Ordinal))
+                    return true;
+            }
+            return false;
+        }
+
         private void ApplyFilter()
         {
             if (_analysisResult == null) return;
@@ -91,7 +108,7 @@ namespace SteroidGuide.Common.UI
                 if (_currentFilter != FilterCategory.All && props.Category != _currentFilter)
                     continue;
 
-                if (hasSearchQuery && !props.NormalizedName.Contains(normalizedQuery, StringComparison.Ordinal))
+                if (hasSearchQuery && !MatchesSearchQuery(props, normalizedQuery))
                     continue;
 
                 _filteredItems.Add(itemId);

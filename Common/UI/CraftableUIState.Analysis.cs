@@ -28,14 +28,16 @@ namespace SteroidGuide.Common.UI
             public readonly int RarityScore;
             public readonly int Value;
             public readonly FilterCategory Category;
+            public readonly HashSet<int> VisibleIngredientIds;
 
-            public CachedItemProps(Item item)
+            public CachedItemProps(Item item, HashSet<int> visibleIngredientIds)
             {
                 NormalizedName = NormalizeSearchText(item.Name);
                 Rare = item.rare;
                 RarityScore = ComputeRarityScore(item.rare);
                 Value = item.value;
                 Category = ItemCategoryClassifier.Classify(item);
+                VisibleIngredientIds = visibleIngredientIds;
             }
         }
 
@@ -92,20 +94,78 @@ namespace SteroidGuide.Common.UI
             var items = scanResult.Items;
 
             _pendingAnalysisTask = Task.Run(
-                () => CraftableAnalyzer.Analyze(graph, items, token),
+                () => AnalyzeAndCollectVisible(graph, items, token),
                 token);
+        }
+
+        // Walks the exact display tree each top-tier item would show on click, so search matches
+        // the ingredients the user can actually see (owned intermediates cut the visible subtree).
+        private static AnalysisResult AnalyzeAndCollectVisible(
+            RecipeGraphData graph, Dictionary<int, int> available, CancellationToken ct)
+        {
+            var result = CraftableAnalyzer.Analyze(graph, available, ct);
+
+            // Defensive: the main thread also reads `available` via OnItemSelected's BuildRecipeTree.
+            // Display mode does not mutate the dict today, but a local copy decouples us from that assumption.
+            var availableCopy = new Dictionary<int, int>(available);
+            var visiting = new HashSet<int>();
+            foreach (int topTierId in result.TopTierItems)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                visiting.Clear();
+                var tree = CraftableAnalyzer.BuildRecipeTree(
+                    topTierId, 1, graph, availableCopy, visiting,
+                    ignoreOwnedForCurrentNode: true, ct);
+
+                var ids = new HashSet<int>();
+                CollectTreeItemIds(tree, ids, ct);
+                result.VisibleIngredients[topTierId] = ids;
+            }
+
+            return result;
+        }
+
+        private static void CollectTreeItemIds(RecipeTreeNode node, HashSet<int> ids, CancellationToken ct)
+        {
+            if (node == null) return;
+            ct.ThrowIfCancellationRequested();
+            ids.Add(node.ItemId);
+            if (node.Children != null)
+            {
+                foreach (var child in node.Children)
+                    CollectTreeItemIds(child, ids, ct);
+            }
         }
 
         private void RebuildItemPropsCache()
         {
             _itemPropsCache.Clear();
+            _ingredientNameCache.Clear();
             if (_analysisResult == null) return;
 
             foreach (int itemId in _analysisResult.TopTierItems)
             {
                 var item = new Item();
                 item.SetDefaults(itemId);
-                _itemPropsCache[itemId] = new CachedItemProps(item);
+
+                HashSet<int> visible = null;
+                if (_analysisResult.VisibleIngredients != null)
+                    _analysisResult.VisibleIngredients.TryGetValue(itemId, out visible);
+
+                _itemPropsCache[itemId] = new CachedItemProps(item, visible);
+
+                if (visible != null)
+                {
+                    foreach (int ingredientId in visible)
+                    {
+                        if (_ingredientNameCache.ContainsKey(ingredientId))
+                            continue;
+                        var ingredientItem = new Item();
+                        ingredientItem.SetDefaults(ingredientId);
+                        _ingredientNameCache[ingredientId] = NormalizeSearchText(ingredientItem.Name);
+                    }
+                }
             }
         }
 
