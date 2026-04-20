@@ -1,5 +1,7 @@
 A new town NPC who lists every item you can craft right now — recipes of recipes of recipes, traced all the way to raw materials.
 
+Works with every mod that registers recipes through tModLoader — Calamity and more.
+
 [h3]Arrival[/h3]
 He arrives at your world's spawn point the moment the world is created — no boss fight, no rare drop, no condition. Build him a vacant house and he moves in.
 
