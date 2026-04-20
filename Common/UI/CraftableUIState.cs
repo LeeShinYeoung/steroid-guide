@@ -76,6 +76,7 @@ namespace SteroidGuide.Common.UI
         private AnalysisResult _analysisResult;
         private ScanResult? _latestScanResult;
         private readonly Dictionary<int, CachedItemProps> _itemPropsCache = new();
+        private readonly Dictionary<int, string> _ingredientNameCache = new();
         private List<int> _filteredItems = new();
         private int _currentPage;
         private int _totalPages = 1;

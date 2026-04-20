@@ -29,6 +29,7 @@ namespace SteroidGuide.Common
     {
         public HashSet<int> AllCraftable = new();
         public List<int> TopTierItems = new();
+        public Dictionary<int, HashSet<int>> VisibleIngredients = new();
     }
 
     public static class CraftableAnalyzer
@@ -119,11 +120,11 @@ namespace SteroidGuide.Common
 
         public static RecipeTreeNode BuildRecipeTree(int itemId, int needed,
             RecipeGraphData graph, Dictionary<int, int> available, HashSet<int> visiting = null,
-            bool ignoreOwnedForCurrentNode = false)
+            bool ignoreOwnedForCurrentNode = false, CancellationToken ct = default)
         {
             visiting ??= new HashSet<int>();
             return TraverseRecipes(itemId, needed, graph, available, visiting,
-                noRecipeCache: null, consumeAvailable: false, ct: default, ignoreOwnedForCurrentNode);
+                noRecipeCache: null, consumeAvailable: false, ct, ignoreOwnedForCurrentNode);
         }
 
         /// <summary>
