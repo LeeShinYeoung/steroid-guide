@@ -2,6 +2,8 @@
 
 A smarter Guide NPC for Terraria. Instead of checking recipes one item at a time, Steroid Guide scans your entire inventory and nearby chests to show you every top-tier item you can craft — including multi-step recipes.
 
+![Craftable items UI with recipe tree](assets/craftable-ui.png)
+
 ## Features
 
 - **Recursive recipe analysis** — Traces full crafting chains automatically. If you have the raw materials for a Night's Edge (across multiple intermediate crafts), it tells you.
@@ -25,6 +27,8 @@ Recalculation only triggers when inventory or visible chests actually change.
 Steroid Guide is a passive town NPC that spawns when a valid house is available. Talk to him and click **"Craftable"** to open the craftable items UI.
 
 He has opinions about the vanilla Guide.
+
+![Steroid Guide next to the vanilla Guide](assets/npc-comparison.png)
 
 ## Installation
 
