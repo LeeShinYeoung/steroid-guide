@@ -1,5 +1,8 @@
 Items you can craft right now — recipes of recipes of recipes. It traces them all to the end.
 
+[h3]Arrival & Reach[/h3]
+He arrives at your world's spawn point the moment the world is created — no boss fight, no rare drop, no condition. Build him a vacant house and he moves in. Talk to him and he reads every chest within 60 tiles of you.
+
 [h3]Full Crafting Path[/h3]
 The core of this mod. It lists final items that require multiple crafting steps, and clicking one unfolds the entire chain down to raw materials in a tree structure. Each material shows how many you have and how many you need, so you know exactly what togather.
 
@@ -10,3 +13,5 @@ Talk to the NPC and it automatically analyzes your inventory and nearby chests. 
 Filter by category — weapons, armor, accessories, tools, consumables, placeables, materials, and more. Sort by rarity or name, and search by item name to quickly find what you're looking for.
 
 [i]He answers before you ask.[/i]
+
+[url=https://github.com/LeeShinYeoung/steroid-guide]GitHub[/url]
