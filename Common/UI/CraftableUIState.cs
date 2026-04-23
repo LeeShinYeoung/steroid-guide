@@ -29,6 +29,8 @@ namespace SteroidGuide.Common.UI
         private const string NearbyChestStatusAnalyzingFallback = "Referencing {0} nearby chests · analyzing...";
         private const string SearchPlaceholderKey = "Mods.SteroidGuide.UI.SearchPlaceholder";
         private const string SearchPlaceholderFallback = "Search craftable items...";
+        private const string RecipeTreeTitleKey = "Mods.SteroidGuide.UI.RecipeTreeTitle";
+        private const string RecipeTreeTitleFallback = "RECIPE TREE";
 
         private static readonly (FilterCategory Category, string LabelKey, string FallbackLabel)[] FilterDefinitions =
         [
@@ -44,12 +46,13 @@ namespace SteroidGuide.Common.UI
         ];
 
         private UIPanel _mainPanel;
+        private UITitleBar _titleBar;
         private UIText _nearbyChestStatusText;
         private string _lastStatusText;
 
         // Filter
         private FilterCategory _currentFilter = FilterCategory.All;
-        private readonly Dictionary<FilterCategory, UISelectableOption> _filterButtons = new();
+        private readonly Dictionary<FilterCategory, UICategoryRow> _filterButtons = new();
 
         // Sort
         private SortCriteria _currentSort = SortCriteria.Rarity;
@@ -70,6 +73,7 @@ namespace SteroidGuide.Common.UI
         private UICenteredText _pageText;
 
         // Recipe tree
+        private UIRecipeTreeHeader _recipeTreeHeader;
         private UIRecipeTree _recipeTree;
 
         // State
@@ -84,102 +88,185 @@ namespace SteroidGuide.Common.UI
         private int _updateCounter;
         private Task<AnalysisResult> _pendingAnalysisTask;
         private CancellationTokenSource _analysisCts;
-        private int ItemsPerPage => _itemGrid?.ItemsPerPage ?? 20;
-        private const float MainPanelWidth = 820f;
-        private const float MainPanelHeight = 600f;
-        private const float MainPanelPadding = 12f;
-        private const float PaginationArrowWidth = 30f;
-        private const float PaginationTextGap = 18f;
-        private const float PaginationTextScale = 0.75f;
-        private const float FilterPanelTop = 42f;
-        private const float SidebarRowHeight = 28f;
-        private const float FilterOptionGap = 2f;
-        private const float FilterOptionStep = SidebarRowHeight + FilterOptionGap;
-        private const float SortOptionStep = SidebarRowHeight;
-        private const float SidebarPanelWidth = 120f;
-        private const float ContentColumnGap = 12f;
-        private const float ContentColumnLeft = SidebarPanelWidth + ContentColumnGap;
-        private const float ContentColumnWidth = MainPanelWidth - MainPanelPadding * 2f - ContentColumnLeft;
-        private const float SearchBoxTop = 42f;
-        private const float SearchBoxHeight = 32f;
-        private const float ItemGridTop = 80f;
-        private const float RecipeTreeTop = 346f;
-        private const float RecipeTreeHeight = 228f;
+        private int ItemsPerPage => _itemGrid?.ItemsPerPage ?? 21;
 
-        private static readonly Color SidebarPanelBackgroundColor = new(20, 26, 44, 175);
-        private static readonly Color SidebarPanelBorderColor = new(94, 108, 154, 120);
-        private static readonly Color SidebarControlBackgroundColor = new(33, 42, 73, 215);
-        private static readonly Color SidebarControlBorderColor = new(118, 136, 195, 185);
+        // Layout — new 3-column redesign
+        private const float MainPanelWidth = 1000f;
+        private const float MainPanelHeight = 750f;
+        private const float TitleBarHeight = 38f;
+        private const float CategoryColumnWidth = 150f;
+        private const float GridColumnWidth = 350f;
+        private const float ColumnDividerWidth = 1f;
+        private const float ColumnInnerPadding = 6f;
+        private const float SearchBoxHeight = 30f;
+        private const float PaginationHeight = 24f;
+        private const float PaginationArrowWidth = 26f;
+        private const float PaginationArrowHeight = 22f;
+        private const float PaginationTextGap = 10f;
+        private const float PaginationTextScale = 0.72f;
+        private const float RecipeHeaderHeight = 28f;
+        private const float CategoryRowHeight = 26f;
+        private const float CategoryRowSpacing = 1f;
+        private const float CategorySectionTop = 8f;
+        private const float CategoryFooterHeight = 34f;
+        private const float CategoryFooterPadding = 6f;
 
         public bool IsSearchFocused => _searchTextBox?.IsFocused ?? false;
         public bool IsMouseOverMainPanel => _mainPanel?.ContainsPoint(Main.MouseScreen) ?? false;
 
         public override void OnInitialize()
         {
-            float itemGridHeight = UIItemGrid.GetPreferredHeight(ContentColumnWidth);
-            float footerControlsTop = GetFooterControlsTop(itemGridHeight);
-            float filterPanelHeight = FilterDefinitions.Length * FilterOptionStep - FilterOptionGap;
-            float sortButtonTop = GetSidebarSortButtonTop(filterPanelHeight);
             _mainPanel = new UIPanel();
             _mainPanel.Width.Set(MainPanelWidth, 0f);
             _mainPanel.Height.Set(MainPanelHeight, 0f);
             _mainPanel.HAlign = 0.5f;
             _mainPanel.VAlign = 0.5f;
-            _mainPanel.SetPadding(MainPanelPadding);
+            _mainPanel.SetPadding(0f);
+            _mainPanel.BackgroundColor = UIPalette.PanelBg;
+            _mainPanel.BorderColor = UIPalette.WindowBorder;
 
+            BuildTitleBar();
+            BuildColumns();
+
+            Append(_mainPanel);
+        }
+
+        private void BuildTitleBar()
+        {
+            _titleBar = new UITitleBar();
+            _titleBar.Top.Set(0f, 0f);
+            _titleBar.Left.Set(0f, 0f);
+            _titleBar.Width.Set(0f, 1f);
+            _titleBar.Height.Set(TitleBarHeight, 0f);
+            _mainPanel.Append(_titleBar);
+
+            // Status pill on the left
+            var statusPill = new UITitleBarStatusPill();
+            statusPill.Top.Set(7f, 0f);
+            statusPill.Left.Set(10f, 0f);
+            statusPill.Width.Set(320f, 0f);
+            statusPill.Height.Set(TitleBarHeight - 14f, 0f);
+            _titleBar.Append(statusPill);
+
+            _nearbyChestStatusText = new UIText(
+                ResolveNearbyChestStatusText(0, 0, NearbyChestStatus.Idle),
+                0.75f);
+            _nearbyChestStatusText.Top.Set(4f, 0f);
+            _nearbyChestStatusText.Left.Set(8f, 0f);
+            _nearbyChestStatusText.TextColor = UIPalette.TitleBarStatusText;
+            statusPill.Append(_nearbyChestStatusText);
+
+            // Close button on the right
             var closeButton = new UICloseButton();
-            closeButton.Top.Set(2f, 0f);
+            closeButton.Top.Set(4f, 0f);
             closeButton.Left.Set(-34f, 1f);
             closeButton.OnLeftClick += (evt, el) =>
             {
                 ModContent.GetInstance<CraftableUISystem>()?.HideUI();
             };
-            _mainPanel.Append(closeButton);
+            _titleBar.Append(closeButton);
+        }
 
-            _nearbyChestStatusText = new UIText(ResolveNearbyChestStatusText(0, 0, NearbyChestStatus.Idle), 0.8f);
-            _nearbyChestStatusText.Top.Set(10f, 0f);
-            _nearbyChestStatusText.Left.Set(8f, 0f);
-            _mainPanel.Append(_nearbyChestStatusText);
+        private void BuildColumns()
+        {
+            float bodyTop = TitleBarHeight;
+            float bodyHeight = MainPanelHeight - TitleBarHeight;
 
-            // ── Filter sidebar ──
+            // Category column
+            var categoryColumn = new UIElement();
+            categoryColumn.Top.Set(bodyTop, 0f);
+            categoryColumn.Left.Set(0f, 0f);
+            categoryColumn.Width.Set(CategoryColumnWidth, 0f);
+            categoryColumn.Height.Set(bodyHeight, 0f);
+            _mainPanel.Append(categoryColumn);
+            BuildCategoryColumn(categoryColumn);
+
+            // Divider 1
+            var divider1 = new UIColumnDivider();
+            divider1.Top.Set(bodyTop, 0f);
+            divider1.Left.Set(CategoryColumnWidth, 0f);
+            divider1.Width.Set(ColumnDividerWidth, 0f);
+            divider1.Height.Set(bodyHeight, 0f);
+            _mainPanel.Append(divider1);
+
+            // Grid column
+            float gridColumnLeft = CategoryColumnWidth + ColumnDividerWidth;
+            var gridColumn = new UIElement();
+            gridColumn.Top.Set(bodyTop, 0f);
+            gridColumn.Left.Set(gridColumnLeft, 0f);
+            gridColumn.Width.Set(GridColumnWidth, 0f);
+            gridColumn.Height.Set(bodyHeight, 0f);
+            _mainPanel.Append(gridColumn);
+            BuildGridColumn(gridColumn);
+
+            // Divider 2
+            float divider2Left = gridColumnLeft + GridColumnWidth;
+            var divider2 = new UIColumnDivider();
+            divider2.Top.Set(bodyTop, 0f);
+            divider2.Left.Set(divider2Left, 0f);
+            divider2.Width.Set(ColumnDividerWidth, 0f);
+            divider2.Height.Set(bodyHeight, 0f);
+            _mainPanel.Append(divider2);
+
+            // Recipe column (flex)
+            float recipeColumnLeft = divider2Left + ColumnDividerWidth;
+            float recipeColumnWidth = MainPanelWidth - recipeColumnLeft;
+            var recipeColumn = new UIElement();
+            recipeColumn.Top.Set(bodyTop, 0f);
+            recipeColumn.Left.Set(recipeColumnLeft, 0f);
+            recipeColumn.Width.Set(recipeColumnWidth, 0f);
+            recipeColumn.Height.Set(bodyHeight, 0f);
+            _mainPanel.Append(recipeColumn);
+            BuildRecipeColumn(recipeColumn);
+        }
+
+        private void BuildCategoryColumn(UIElement column)
+        {
+            var bg = new UIColorBackdrop(UIPalette.CatColumnBg);
+            bg.Width.Set(0f, 1f);
+            bg.Height.Set(0f, 1f);
+            column.Append(bg);
+
+            // Category rows stack
             int sortOptionCount = Enum.GetValues(typeof(SortCriteria)).Length;
-            float sortDropdownHeight = sortOptionCount * SortOptionStep;
+            float sortDropdownHeight = sortOptionCount * CategoryRowHeight;
 
-            var filterPanel = new UIElement();
-            filterPanel.Top.Set(FilterPanelTop, 0f);
-            filterPanel.Left.Set(0f, 0f);
-            filterPanel.Width.Set(SidebarPanelWidth, 0f);
-            filterPanel.Height.Set(filterPanelHeight, 0f);
-            _mainPanel.Append(filterPanel);
-
-            float filterY = 0f;
+            float filterY = CategorySectionTop;
             foreach (var filterDefinition in FilterDefinitions)
             {
-                var btn = new UISelectableOption(ResolveLocalizedText(filterDefinition.LabelKey, filterDefinition.FallbackLabel));
-                btn.Top.Set(filterY, 0f);
+                var row = new UICategoryRow(
+                    ResolveLocalizedText(filterDefinition.LabelKey, filterDefinition.FallbackLabel));
+                row.Top.Set(filterY, 0f);
+                row.Left.Set(0f, 0f);
+                row.Width.Set(0f, 1f);
+                row.Height.Set(CategoryRowHeight, 0f);
                 var captured = filterDefinition.Category;
-                btn.OnLeftClick += (evt, el) => SetFilter(captured);
-                btn.SetSelected(filterDefinition.Category == _currentFilter);
-                filterPanel.Append(btn);
-                _filterButtons[filterDefinition.Category] = btn;
-                filterY += FilterOptionStep;
+                row.OnLeftClick += (evt, el) => SetFilter(captured);
+                row.SetSelected(filterDefinition.Category == _currentFilter);
+                column.Append(row);
+                _filterButtons[filterDefinition.Category] = row;
+                filterY += CategoryRowHeight + CategoryRowSpacing;
             }
 
-            // ── Sort dropdown (below filter sidebar) ──
-            _sortButton = new UISortButton();
-            _sortButton.Top.Set(sortButtonTop, 0f);
-            _sortButton.Left.Set(0f, 0f);
-            _sortButton.Width.Set(SidebarPanelWidth, 0f);
-            _sortButton.Height.Set(SidebarRowHeight, 0f);
+            // Rarity filter / sort button in the footer
+            _sortButton = new UISortButton(drawDots: true);
+            _sortButton.Top.Set(-CategoryFooterHeight - CategoryFooterPadding, 1f);
+            _sortButton.Left.Set(CategoryFooterPadding, 0f);
+            _sortButton.Width.Set(-(CategoryFooterPadding * 2f), 1f);
+            _sortButton.Height.Set(CategoryFooterHeight, 0f);
             _sortButton.OnLeftClick += (evt, el) => ToggleSortDropdown();
             _sortButton.SetState(GetSortLabel(_currentSort), _sortDropdownOpen);
-            _mainPanel.Append(_sortButton);
+            column.Append(_sortButton);
 
+            // Dropdown (appended to _mainPanel only when open, positioned above the sort button)
             _sortDropdownPanel = new UIElement();
-            _sortDropdownPanel.Top.Set(sortButtonTop + SidebarRowHeight, 0f);
-            _sortDropdownPanel.Left.Set(0f, 0f);
-            _sortDropdownPanel.Width.Set(SidebarPanelWidth, 0f);
+            _sortDropdownPanel.Width.Set(CategoryColumnWidth - CategoryFooterPadding * 2f, 0f);
             _sortDropdownPanel.Height.Set(sortDropdownHeight, 0f);
+            // Position: above the category-footer button, anchored to the panel.
+            _sortDropdownPanel.Top.Set(
+                TitleBarHeight + (MainPanelHeight - TitleBarHeight) - CategoryFooterHeight
+                - CategoryFooterPadding - sortDropdownHeight - 2f, 0f);
+            _sortDropdownPanel.Left.Set(CategoryFooterPadding, 0f);
 
             float sortY = 0f;
             foreach (SortCriteria sort in Enum.GetValues(typeof(SortCriteria)))
@@ -191,81 +278,126 @@ namespace SteroidGuide.Common.UI
                 option.SetSelected(sort == _currentSort);
                 _sortDropdownPanel.Append(option);
                 _sortOptions[sort] = option;
-                sortY += SortOptionStep;
+                sortY += CategoryRowHeight;
             }
-            // Start hidden
-            // _sortDropdownPanel is only appended when dropdown is open
+        }
 
-            // ── Search box ──
+        private void BuildGridColumn(UIElement column)
+        {
+            var bg = new UIColorBackdrop(UIPalette.GridColumnBg);
+            bg.Width.Set(0f, 1f);
+            bg.Height.Set(0f, 1f);
+            column.Append(bg);
+
+            float searchTop = ColumnInnerPadding;
+            float gridTop = searchTop + SearchBoxHeight + ColumnInnerPadding;
+            float paginationTop = (MainPanelHeight - TitleBarHeight) - PaginationHeight - ColumnInnerPadding;
+            float gridHeight = paginationTop - gridTop - ColumnInnerPadding;
+
             _searchTextBox = new UISearchTextBox(
                 ResolveLocalizedText(SearchPlaceholderKey, SearchPlaceholderFallback));
-            _searchTextBox.Top.Set(SearchBoxTop, 0f);
-            _searchTextBox.Left.Set(ContentColumnLeft, 0f);
-            _searchTextBox.Width.Set(ContentColumnWidth, 0f);
+            _searchTextBox.Top.Set(searchTop, 0f);
+            _searchTextBox.Left.Set(ColumnInnerPadding, 0f);
+            _searchTextBox.Width.Set(-ColumnInnerPadding * 2f, 1f);
             _searchTextBox.Height.Set(SearchBoxHeight, 0f);
             _searchTextBox.OnTextChanged += OnSearchTextChanged;
-            _mainPanel.Append(_searchTextBox);
+            column.Append(_searchTextBox);
 
-            // ── Item grid ──
             _itemGrid = new UIItemGrid();
-            _itemGrid.Top.Set(ItemGridTop, 0f);
-            _itemGrid.Left.Set(ContentColumnLeft, 0f);
-            _itemGrid.Width.Set(ContentColumnWidth, 0f);
-            _itemGrid.Height.Set(itemGridHeight, 0f);
+            _itemGrid.Top.Set(gridTop, 0f);
+            _itemGrid.Left.Set(ColumnInnerPadding, 0f);
+            _itemGrid.Width.Set(-ColumnInnerPadding * 2f, 1f);
+            _itemGrid.Height.Set(gridHeight, 0f);
             _itemGrid.OnItemSelected += OnItemSelected;
             _itemGrid.OnPageScrollRequested += TryChangePageFromScroll;
-            _mainPanel.Append(_itemGrid);
+            column.Append(_itemGrid);
 
-            // ── Pagination ──
             _paginationRow = new UIElement();
-            _paginationRow.Top.Set(footerControlsTop, 0f);
-            _paginationRow.Left.Set(ContentColumnLeft, 0f);
-            _paginationRow.Width.Set(ContentColumnWidth, 0f);
-            _paginationRow.Height.Set(SidebarRowHeight, 0f);
-            _mainPanel.Append(_paginationRow);
+            _paginationRow.Top.Set(paginationTop, 0f);
+            _paginationRow.Left.Set(ColumnInnerPadding, 0f);
+            _paginationRow.Width.Set(-ColumnInnerPadding * 2f, 1f);
+            _paginationRow.Height.Set(PaginationHeight, 0f);
+            column.Append(_paginationRow);
 
             _previousPageButton = new UIPaginationArrowButton(PaginationArrowDirection.Left);
             _previousPageButton.Width.Set(PaginationArrowWidth, 0f);
-            _previousPageButton.Height.Set(SidebarRowHeight, 0f);
-            _previousPageButton.Top.Set(0f, 0f);
+            _previousPageButton.Height.Set(PaginationArrowHeight, 0f);
+            _previousPageButton.Top.Set((PaginationHeight - PaginationArrowHeight) * 0.5f, 0f);
             _previousPageButton.OnLeftClick += (evt, el) => ChangePage(-1);
             _paginationRow.Append(_previousPageButton);
 
             _pageText = new UICenteredText("Page 1/1", PaginationTextScale);
+            _pageText.SetColor(UIPalette.PageText);
             _paginationRow.Append(_pageText);
 
             _nextPageButton = new UIPaginationArrowButton(PaginationArrowDirection.Right);
             _nextPageButton.Width.Set(PaginationArrowWidth, 0f);
-            _nextPageButton.Height.Set(SidebarRowHeight, 0f);
-            _nextPageButton.Top.Set(0f, 0f);
+            _nextPageButton.Height.Set(PaginationArrowHeight, 0f);
+            _nextPageButton.Top.Set((PaginationHeight - PaginationArrowHeight) * 0.5f, 0f);
             _nextPageButton.OnLeftClick += (evt, el) => ChangePage(1);
             _paginationRow.Append(_nextPageButton);
 
             UpdatePageText();
+        }
 
-            // ── Recipe tree (bottom half) ──
+        private void BuildRecipeColumn(UIElement column)
+        {
+            var bg = new UIColorBackdrop(UIPalette.RecipeColumnBg);
+            bg.Width.Set(0f, 1f);
+            bg.Height.Set(0f, 1f);
+            column.Append(bg);
+
+            _recipeTreeHeader = new UIRecipeTreeHeader(
+                ResolveLocalizedText(RecipeTreeTitleKey, RecipeTreeTitleFallback));
+            _recipeTreeHeader.Top.Set(0f, 0f);
+            _recipeTreeHeader.Left.Set(0f, 0f);
+            _recipeTreeHeader.Width.Set(0f, 1f);
+            _recipeTreeHeader.Height.Set(RecipeHeaderHeight, 0f);
+            column.Append(_recipeTreeHeader);
+
             _recipeTree = new UIRecipeTree();
-            _recipeTree.Top.Set(RecipeTreeTop, 0f);
+            _recipeTree.Top.Set(RecipeHeaderHeight, 0f);
             _recipeTree.Left.Set(0f, 0f);
             _recipeTree.Width.Set(0f, 1f);
-            _recipeTree.Height.Set(RecipeTreeHeight, 0f);
-            _mainPanel.Append(_recipeTree);
-
-            Append(_mainPanel);
+            _recipeTree.Height.Set(-RecipeHeaderHeight, 1f);
+            _recipeTree.SetHaveLookup(GetScanHaveCount);
+            column.Append(_recipeTree);
         }
 
-        private static float GetFooterControlsTop(float itemGridHeight)
+        private int GetScanHaveCount(int itemId)
         {
-            float itemGridBottom = ItemGridTop + itemGridHeight;
-            float availableGap = RecipeTreeTop - itemGridBottom - SidebarRowHeight;
-            return itemGridBottom + availableGap * 0.5f;
+            if (!_latestScanResult.HasValue)
+                return 0;
+            var items = _latestScanResult.Value.Items;
+            if (items == null)
+                return 0;
+            return items.TryGetValue(itemId, out int count) ? count : 0;
         }
 
-        private static float GetSidebarSortButtonTop(float filterPanelHeight)
+        private void UpdateCategoryBadges()
         {
-            float filterBottom = FilterPanelTop + filterPanelHeight;
-            float gapHeight = Math.Max(0f, RecipeTreeTop - filterBottom);
-            return filterBottom + Math.Max(0f, (gapHeight - SidebarRowHeight) * 0.5f);
+            int categoryCount = Enum.GetValues(typeof(FilterCategory)).Length;
+            Span<int> counts = stackalloc int[categoryCount];
+            int total = 0;
+
+            if (_analysisResult != null)
+            {
+                foreach (int itemId in _analysisResult.TopTierItems)
+                {
+                    if (!_itemPropsCache.TryGetValue(itemId, out var props))
+                        continue;
+                    int idx = (int)props.Category;
+                    if (idx >= 0 && idx < counts.Length)
+                        counts[idx]++;
+                    total++;
+                }
+            }
+
+            foreach (var (cat, row) in _filterButtons)
+            {
+                int value = cat == FilterCategory.All ? total : counts[(int)cat];
+                row.SetBadgeCount(value);
+            }
         }
 
         public void CancelPendingAnalysis()
@@ -289,6 +421,7 @@ namespace SteroidGuide.Common.UI
             _sortButton?.SetState(GetSortLabel(_currentSort), _sortDropdownOpen);
             _searchTextBox?.Reset();
             _recipeTree?.ClearTree();
+            _recipeTreeHeader?.ClearSelectedItemName();
             UpdateFilterSelectionStates();
             _lastStatusText = null;
             RunAnalysis();

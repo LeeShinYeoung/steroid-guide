@@ -15,13 +15,17 @@ namespace SteroidGuide.Common.UI
         private const int IconDotSize = 3;
         private const int IconGap = 4;
         private const float IconLeftPadding = 12f;
-        private const float LabelLeftPadding = 36f;
+        private const float LabelLeftPadding = 40f;
+        private const int RarityDotSize = 6;
+        private const int RarityDotGap = 2;
 
+        private readonly bool _drawDots;
         private string _label = string.Empty;
         private bool _open;
 
-        public UISortButton()
+        public UISortButton(bool drawDots = false)
         {
+            _drawDots = drawDots;
             Width.Set(0f, 1f);
             Height.Set(28f, 0f);
         }
@@ -69,7 +73,10 @@ namespace SteroidGuide.Common.UI
             UIDrawHelper.DrawRect(spriteBatch, new Rectangle(bounds.X, bounds.Y, AccentWidth, bounds.Height), accentColor);
             UIDrawHelper.DrawBorder(spriteBatch, bounds, borderColor, 1);
 
-            DrawSortIcon(spriteBatch, bounds, iconColor);
+            if (_drawDots)
+                DrawRarityDots(spriteBatch, bounds);
+            else
+                DrawSortIcon(spriteBatch, bounds, iconColor);
 
             Vector2 labelSize = FontAssets.MouseText.Value.MeasureString(_label) * TextScale;
             Vector2 labelPosition = new(
@@ -89,6 +96,27 @@ namespace SteroidGuide.Common.UI
                 int y = centerY - IconGap - 1 + i * IconGap;
                 UIDrawHelper.DrawRect(spriteBatch, new Rectangle(x, y, IconDotSize, IconDotSize), color);
                 UIDrawHelper.DrawRect(spriteBatch, new Rectangle(x + IconDotSize + 2, y, widths[i], IconLineHeight), color);
+            }
+        }
+
+        private static void DrawRarityDots(SpriteBatch spriteBatch, Rectangle bounds)
+        {
+            Color[] dots =
+            [
+                UIPalette.RarityDotGray,
+                UIPalette.RarityDotBlue,
+                UIPalette.RarityDotPurple,
+                UIPalette.RarityDotYellow,
+            ];
+
+            int x = (int)(bounds.X + IconLeftPadding);
+            int y = bounds.Center.Y - RarityDotSize / 2;
+
+            for (int i = 0; i < dots.Length; i++)
+            {
+                UIDrawHelper.DrawRect(spriteBatch,
+                    new Rectangle(x + i * (RarityDotSize + RarityDotGap), y, RarityDotSize, RarityDotSize),
+                    dots[i]);
             }
         }
     }

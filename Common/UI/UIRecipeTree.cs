@@ -22,8 +22,12 @@ namespace SteroidGuide.Common.UI
         private readonly HashSet<int> _collapsedItemIds = new();
         private static readonly Dictionary<int, int> TileDisplayItemCache = new();
 
-        private const float DepthIndent = 20f;
-        private static readonly Color LineColor = Color.Gray * 0.6f;
+        // Per-frame scan lookup for ingredient rows (avoids rebuilding the tree on scan change).
+        private Func<int, int> _getHaveCount;
+
+        private const float DepthIndent = 18f;
+        private const float IngredientExtraIndent = 32f;
+        private static readonly Color LineColor = UIPalette.TreeLine;
         private const int LineThickness = 2;
 
         public override void OnInitialize()
@@ -32,6 +36,8 @@ namespace SteroidGuide.Common.UI
             bg.Width.Set(0f, 1f);
             bg.Height.Set(0f, 1f);
             bg.SetPadding(6f);
+            bg.BackgroundColor = new Color(0, 0, 0, 0); // let the recipe column backdrop show through
+            bg.BorderColor = new Color(0, 0, 0, 0);
             Append(bg);
 
             _scrollbar = new UIScrollbar();
@@ -60,6 +66,15 @@ namespace SteroidGuide.Common.UI
             TileDisplayItemCache.Clear();
         }
 
+        /// <summary>
+        /// Sets the lookup used by ingredient rows to pull `have` counts each frame.
+        /// Lookup receives an item id and returns the available stack (0 if missing).
+        /// </summary>
+        public void SetHaveLookup(Func<int, int> getHaveCount)
+        {
+            _getHaveCount = getHaveCount;
+        }
+
         public void ClearTree()
         {
             _currentRoot = null;
@@ -81,7 +96,8 @@ namespace SteroidGuide.Common.UI
 
             // Root item title with icon — no tree lines
             var rootStations = root.UsedRecipe != null ? ResolveStations(root.UsedRecipe) : new List<StationDisplayInfo>();
-            var rootLine = new UITreeItemLine(root.ItemId, "", Color.Gold, 0.85f, -1, false, null, TriangleState.None, rootStations);
+            var rootChip = BuildStatusChip(root.Status);
+            var rootLine = new UITreeItemLine(root.ItemId, string.Empty, Color.Gold, 0.85f, -1, false, null, TriangleState.None, rootStations, rootChip);
             rootLine.Width.Set(0f, 1f);
             rootLine.Height.Set(26f, 0f);
             _list.Add(rootLine);
@@ -91,6 +107,15 @@ namespace SteroidGuide.Common.UI
 
             if (root.UsedRecipe != null)
                 AddRecipeConditionLine(root.UsedRecipe, -1, emptyParentLines);
+
+            // Root ingredient rows appear when its recipe is visible — matches HTML behaviour
+            // where the root ingredients are rendered under the root node as flat rows.
+            // The root has no triangle toggle, so ingredients must stay visible regardless of
+            // `_collapsedItemIds` membership (which can leak from a prior tree with the same id)
+            // unless the root actually has displayable children to hide.
+            bool rootHasDisplayableChildren = HasDisplayableRecipeChildren(root);
+            if (root.UsedRecipe != null && (!rootHasDisplayableChildren || !IsCollapsed(root)))
+                AddIngredientRows(root, 0);
 
             AddChildren(root, 0, emptyParentLines);
         }
@@ -105,13 +130,7 @@ namespace SteroidGuide.Common.UI
                 var child = node.Children[i];
                 bool isLast = i == node.Children.Count - 1;
 
-                string countStr = child.RequiredCount > 1 ? $" x{child.RequiredCount}" : "";
-                string statusStr = child.Status switch
-                {
-                    NodeStatus.Owned => $" [owned: {child.OwnedCount}]",
-                    NodeStatus.Craftable => " [craftable]",
-                    _ => " [missing]"
-                };
+                string countStr = child.RequiredCount > 1 ? $" x{child.RequiredCount}" : string.Empty;
 
                 Color color = child.Status switch
                 {
@@ -124,15 +143,14 @@ namespace SteroidGuide.Common.UI
                 bool hasDisplayableChildren = HasDisplayableRecipeChildren(child);
                 bool isCollapsed = IsCollapsed(child);
 
-                string suffix = $"{countStr}{statusStr}";
-
                 TriangleState triangleState = TriangleState.None;
                 if (hasDisplayableChildren)
                     triangleState = isCollapsed ? TriangleState.Collapsed : TriangleState.Expanded;
 
                 var stations = child.UsedRecipe != null ? ResolveStations(child.UsedRecipe) : new List<StationDisplayInfo>();
-                var line = new UITreeItemLine(child.ItemId, suffix, color, 0.7f,
-                    depth, isLast, parentLines, triangleState, stations);
+                var chip = BuildStatusChip(child, hasRecipeDetails);
+                var line = new UITreeItemLine(child.ItemId, countStr, color, 0.7f,
+                    depth, isLast, parentLines, triangleState, stations, chip);
                 line.Width.Set(0f, 1f);
                 line.Height.Set(26f, 0f);
 
@@ -144,6 +162,18 @@ namespace SteroidGuide.Common.UI
 
                 _list.Add(line);
 
+                // Ingredient rows (flat) appear for any expanded node that has a recipe,
+                // regardless of whether the subtree has displayable children. This mirrors
+                // the HTML mock where every expanded node shows its direct ingredients.
+                // When a node has no displayable children there is no triangle toggle, so
+                // ingredients must remain visible regardless of `_collapsedItemIds`
+                // membership (which can leak from a prior tree using the same item id).
+                bool showRecipeDetails = child.UsedRecipe != null && (!hasDisplayableChildren || !isCollapsed);
+                if (showRecipeDetails)
+                {
+                    AddIngredientRows(child, depth + 1);
+                }
+
                 // Show children if not collapsed
                 if (hasRecipeDetails && !isCollapsed)
                 {
@@ -154,6 +184,58 @@ namespace SteroidGuide.Common.UI
                     AddChildren(child, depth + 1, childParentLines);
                 }
             }
+        }
+
+        private void AddIngredientRows(RecipeTreeNode node, int depth)
+        {
+            if (node?.UsedRecipe == null)
+                return;
+
+            int batchSize = Math.Max(1, node.UsedRecipe.createItem.stack);
+            int needed = Math.Max(1, node.RequiredCount);
+            int batches = (needed + batchSize - 1) / batchSize;
+
+            foreach (var ingredient in node.UsedRecipe.requiredItem)
+            {
+                if (ingredient.type <= ItemID.None)
+                    continue;
+
+                int ingredientNeeded = ingredient.stack * batches;
+                // Indent matches HTML: (6 + level * 18 + 32). Here `depth` is the depth
+                // at which the block sits (the parent node is drawn at depth*DepthIndent
+                // because UIList children don't inherit tree connector geometry).
+                float leftIndent = depth * DepthIndent + IngredientExtraIndent;
+                var row = new UIIngredientRow(ingredient.type, ingredientNeeded, _getHaveCount, leftIndent);
+                row.Width.Set(0f, 1f);
+                row.Height.Set(22f, 0f);
+                _list.Add(row);
+            }
+        }
+
+        private static StatusChipInfo BuildStatusChip(NodeStatus status)
+        {
+            return status switch
+            {
+                NodeStatus.Craftable => new StatusChipInfo("CRAFTABLE",
+                    UIPalette.ChipCraftableBg, UIPalette.ChipCraftableBorder, UIPalette.ChipCraftableText),
+                NodeStatus.Owned => new StatusChipInfo(string.Empty,
+                    UIPalette.ChipOwnedBg, UIPalette.ChipOwnedBorder, UIPalette.ChipOwnedText),
+                _ => new StatusChipInfo("MISSING",
+                    UIPalette.ChipMissingBg, UIPalette.ChipMissingBorder, UIPalette.ChipMissingText),
+            };
+        }
+
+        private static StatusChipInfo BuildStatusChip(RecipeTreeNode node, bool hasRecipeDetails)
+        {
+            return node.Status switch
+            {
+                NodeStatus.Owned => new StatusChipInfo($"OWNED x{node.OwnedCount}",
+                    UIPalette.ChipOwnedBg, UIPalette.ChipOwnedBorder, UIPalette.ChipOwnedText),
+                NodeStatus.Craftable => new StatusChipInfo("CRAFTABLE",
+                    UIPalette.ChipCraftableBg, UIPalette.ChipCraftableBorder, UIPalette.ChipCraftableText),
+                _ => new StatusChipInfo("MISSING",
+                    UIPalette.ChipMissingBg, UIPalette.ChipMissingBorder, UIPalette.ChipMissingText),
+            };
         }
 
         private void ToggleCollapse(int itemId)
@@ -177,7 +259,9 @@ namespace SteroidGuide.Common.UI
 
         private bool IsCollapsed(RecipeTreeNode node)
         {
-            return HasDisplayableRecipeChildren(node) && _collapsedItemIds.Contains(node.ItemId);
+            if (node == null || node.UsedRecipe == null)
+                return false;
+            return _collapsedItemIds.Contains(node.ItemId);
         }
 
         private void AddRecipeConditionLine(Recipe recipe, int depth, List<bool> parentLines)
@@ -339,6 +423,11 @@ namespace SteroidGuide.Common.UI
             public bool HasDisplayItem => ItemId > ItemID.None;
         }
 
+        private readonly record struct StatusChipInfo(string Text, Color Background, Color Border, Color TextColor)
+        {
+            public bool IsVisible => !string.IsNullOrEmpty(Text);
+        }
+
         private enum TriangleState
         {
             None,
@@ -360,6 +449,7 @@ namespace SteroidGuide.Common.UI
             private readonly List<bool> _parentLines;
             private readonly TriangleState _triangleState;
             private readonly List<StationDisplayInfo> _stations;
+            private readonly StatusChipInfo _statusChip;
 
             private const float TriangleSize = 8f;
             private const float IconSize = 20f;
@@ -372,15 +462,16 @@ namespace SteroidGuide.Common.UI
             private const float RightPadding = 4f;
             private const float FallbackScale = 0.58f;
             private const float MaxFallbackBadgeWidth = 140f;
+            private const float ChipHeight = 16f;
+            private const float ChipHorizontalPadding = 6f;
+            private const float ChipScale = 0.58f;
 
-            private static readonly Color BadgeBackgroundColor = new(40, 56, 88, 210);
-            private static readonly Color BadgeBorderColor = new(124, 166, 214, 200);
-            private static readonly Color BadgeHoverColor = new(82, 112, 154, 220);
-            private static readonly Color FallbackTextColor = new(225, 235, 248);
+            private static readonly Color BadgeHoverColor = UIPalette.StationHoverBg;
 
             public UITreeItemLine(int itemId, string suffix, Color color, float scale,
                 int depth, bool isLast, List<bool> parentLines, TriangleState triangleState,
-                List<StationDisplayInfo> stations = default)
+                List<StationDisplayInfo> stations = default,
+                StatusChipInfo chip = default)
             {
                 _itemId = itemId;
                 _suffix = suffix;
@@ -391,6 +482,7 @@ namespace SteroidGuide.Common.UI
                 _parentLines = parentLines != null ? new List<bool>(parentLines) : null;
                 _triangleState = triangleState;
                 _stations = stations ?? new List<StationDisplayInfo>();
+                _statusChip = chip;
             }
 
             public override void Recalculate()
@@ -433,15 +525,27 @@ namespace SteroidGuide.Common.UI
                 float iconX = contentX + triangleWidth + IconSize / 2f;
                 UIItemRenderingHelper.TryDrawItemIcon(spriteBatch, _itemId, new Vector2(iconX, centerY), IconSize);
 
-                // Draw item name + suffix, then inline crafting stations.
+                // Draw item name + count suffix
                 float textX = contentX + triangleWidth + IconSize + TextSpacing;
                 string text = GetDisplayText();
                 Vector2 textPosition = GetCenteredBorderStringPosition(text, textX, centerY, _scale);
                 Utils.DrawBorderString(spriteBatch, text, textPosition, _color, _scale);
 
+                float textWidth = FontAssets.MouseText.Value.MeasureString(text).X * _scale;
+                float chipStartX = textX + textWidth + InlineBadgeSpacing;
+
                 bool stationHovered = false;
+
+                // Status chip (CRAFTABLE/MISSING/OWNED) — drawn just to the right of the text,
+                // before any station badges.
+                if (_statusChip.IsVisible)
+                {
+                    Rectangle chipRect = DrawStatusChip(spriteBatch, chipStartX, centerY);
+                    chipStartX = chipRect.Right + BadgeSpacing;
+                }
+
                 if (_stations.Count > 0)
-                    LayoutBadges(spriteBatch, x, y, dims.Width, textX, text, out stationHovered);
+                    LayoutBadges(spriteBatch, x, y, dims.Width, chipStartX, out stationHovered);
 
                 var rect = dims.ToRectangle();
                 if (!stationHovered &&
@@ -453,6 +557,23 @@ namespace SteroidGuide.Common.UI
                 }
             }
 
+            private Rectangle DrawStatusChip(SpriteBatch spriteBatch, float leftX, float centerY)
+            {
+                Vector2 textSize = FontAssets.MouseText.Value.MeasureString(_statusChip.Text) * ChipScale;
+                int chipWidth = (int)Math.Ceiling(textSize.X + ChipHorizontalPadding * 2f);
+                int chipTop = (int)(centerY - ChipHeight * 0.5f);
+                var chipRect = new Rectangle((int)leftX, chipTop, chipWidth, (int)ChipHeight);
+
+                UIDrawHelper.DrawRect(spriteBatch, chipRect, _statusChip.Background);
+                UIDrawHelper.DrawBorder(spriteBatch, chipRect, _statusChip.Border, 1);
+
+                Vector2 textPos = new(
+                    chipRect.X + (chipRect.Width - textSize.X) * 0.5f,
+                    chipRect.Y + (chipRect.Height - textSize.Y) * 0.5f);
+                Utils.DrawBorderString(spriteBatch, _statusChip.Text, textPos, _statusChip.TextColor, ChipScale);
+                return chipRect;
+            }
+
             private float CalculateDesiredHeight(float width)
             {
                 if (_stations.Count == 0)
@@ -461,22 +582,32 @@ namespace SteroidGuide.Common.UI
                 float contentX = GetContentX(0f);
                 float triangleWidth = _triangleState != TriangleState.None ? TriangleSize + 4f : 0f;
                 float textX = contentX + triangleWidth + IconSize + TextSpacing;
-                return LayoutBadges(null, 0f, 0f, width, textX, GetDisplayText(), out _);
+                string text = GetDisplayText();
+                float textWidth = FontAssets.MouseText.Value.MeasureString(text).X * _scale;
+                float rowStart = textX + textWidth + InlineBadgeSpacing;
+
+                if (_statusChip.IsVisible)
+                {
+                    Vector2 chipSize = FontAssets.MouseText.Value.MeasureString(_statusChip.Text) * ChipScale;
+                    rowStart += chipSize.X + ChipHorizontalPadding * 2f + BadgeSpacing;
+                }
+
+                return LayoutBadges(null, 0f, 0f, width, rowStart, out _);
             }
 
-            private float LayoutBadges(SpriteBatch spriteBatch, float x, float y, float width, float textX, string text, out bool hoveredAny)
+            private float LayoutBadges(SpriteBatch spriteBatch, float x, float y, float width, float startX, out bool hoveredAny)
             {
                 hoveredAny = false;
 
                 if (_stations.Count == 0)
                     return BaseRowHeight;
 
-                float textWidth = FontAssets.MouseText.Value.MeasureString(text).X * _scale;
-                float desiredRowStartX = textX + textWidth + InlineBadgeSpacing;
-                float wrappedRowStartX = textX;
+                float contentX = GetContentX(x);
+                float triangleWidth = _triangleState != TriangleState.None ? TriangleSize + 4f : 0f;
+                float wrappedRowStartX = contentX + triangleWidth + IconSize + TextSpacing;
                 float contentRight = x + width - RightPadding;
-                float currentX = desiredRowStartX;
-                float rowStartX = desiredRowStartX;
+                float currentX = startX;
+                float rowStartX = startX;
                 float centerY = y + BaseRowHeight * 0.5f;
                 float currentY = centerY - BadgeSize * 0.5f;
                 bool placedAnyBadge = false;
@@ -620,8 +751,8 @@ namespace SteroidGuide.Common.UI
 
             private static void DrawStationBadge(SpriteBatch spriteBatch, StationDisplayInfo station, Rectangle badgeRect, bool hovered)
             {
-                UIDrawHelper.DrawRect(spriteBatch, badgeRect, hovered ? BadgeHoverColor : BadgeBackgroundColor);
-                UIDrawHelper.DrawBorder(spriteBatch, badgeRect, BadgeBorderColor, 1);
+                UIDrawHelper.DrawRect(spriteBatch, badgeRect, hovered ? BadgeHoverColor : UIPalette.StationBg);
+                UIDrawHelper.DrawBorder(spriteBatch, badgeRect, UIPalette.StationBorder, 1);
 
                 if (station.HasDisplayItem)
                 {
@@ -634,7 +765,7 @@ namespace SteroidGuide.Common.UI
                 Vector2 textPosition = new(
                     badgeRect.X + (badgeRect.Width - textSize.X) * 0.5f,
                     badgeRect.Y + (badgeRect.Height - textSize.Y) * 0.5f);
-                Utils.DrawBorderString(spriteBatch, text, textPosition, FallbackTextColor, FallbackScale);
+                Utils.DrawBorderString(spriteBatch, text, textPosition, UIPalette.StationText, FallbackScale);
             }
 
             private static void ApplyHover(StationDisplayInfo station)

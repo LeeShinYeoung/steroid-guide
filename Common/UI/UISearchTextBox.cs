@@ -40,15 +40,19 @@ namespace SteroidGuide.Common.UI
             CalculatedStyle dims = GetDimensions();
             Rectangle bounds = dims.ToRectangle();
 
-            Color backgroundColor = IsFocused
-                ? new Color(48, 52, 86, 230)
-                : new Color(30, 34, 56, 215);
-            Color borderColor = IsFocused
-                ? new Color(180, 205, 255)
-                : new Color(90, 110, 150);
+            Color backgroundColor = UIPalette.SearchBg;
+            Color borderColor = IsFocused ? UIPalette.SearchBorderFocused : UIPalette.SearchBorder;
 
             UIDrawHelper.DrawRect(spriteBatch, bounds, backgroundColor);
-            UIDrawHelper.DrawBorder(spriteBatch, bounds, borderColor, 2);
+            UIDrawHelper.DrawBorder(spriteBatch, bounds, borderColor, 1);
+
+            if (IsFocused)
+            {
+                // Soft halo one pixel outside the border to mimic the HTML focus glow.
+                Rectangle halo = bounds;
+                halo.Inflate(1, 1);
+                UIDrawHelper.DrawBorder(spriteBatch, halo, UIPalette.SearchBorderFocused * 0.3f, 1);
+            }
 
             bool drawPlaceholder = string.IsNullOrEmpty(_text);
             float maxTextWidth = Math.Max(0f, dims.Width - HorizontalPadding * 2f);
@@ -57,7 +61,7 @@ namespace SteroidGuide.Common.UI
             if (drawPlaceholder)
             {
                 string placeholderText = TrimTextToFit(_placeholderText, maxTextWidth);
-                Utils.DrawBorderString(spriteBatch, placeholderText, textPosition, new Color(150, 150, 150), TextScale);
+                Utils.DrawBorderString(spriteBatch, placeholderText, textPosition, UIPalette.SearchPlaceholder, TextScale);
             }
             else
             {
@@ -65,7 +69,7 @@ namespace SteroidGuide.Common.UI
                     ? $"{_text}|"
                     : _text;
                 string trimmedText = TrimTextToFit(typedText, maxTextWidth);
-                Utils.DrawBorderString(spriteBatch, trimmedText, textPosition, Color.White, TextScale);
+                Utils.DrawBorderString(spriteBatch, trimmedText, textPosition, UIPalette.SearchText, TextScale);
             }
         }
 
