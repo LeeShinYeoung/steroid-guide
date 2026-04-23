@@ -15,20 +15,23 @@ namespace SteroidGuide.Common.UI
     /// </summary>
     public class UIIngredientRow : UIElement
     {
-        private const float IconSize = 20f;
+        private const float IconSize = 30f;
         private const float NameScale = 0.7f;
         private const float HaveScale = 0.75f;
         private const float NeedScale = 0.65f;
-        private const float LeftPadding = 8f;
+        private const float LeftPadding = 10f;
         private const float RightPadding = 10f;
         private const float IconBorderPadding = 2f;
         private const float IconNameGap = 8f;
         private const float StockGap = 3f;
+        private const float BlockBarWidth = 2f;
+        private const float BlockTailExtension = 1f;
 
         private readonly int _ingredientId;
         private readonly int _needed;
         private readonly Func<int, int> _getHaveCount;
         private readonly float _leftIndent;
+        private bool _isLastInBlock;
 
         public UIIngredientRow(int ingredientId, int needed, Func<int, int> getHaveCount, float leftIndent = 0f)
         {
@@ -36,9 +39,15 @@ namespace SteroidGuide.Common.UI
             _needed = Math.Max(0, needed);
             _getHaveCount = getHaveCount;
             _leftIndent = Math.Max(0f, leftIndent);
+            _isLastInBlock = true;
 
             Width.Set(0f, 1f);
-            Height.Set(24f, 0f);
+            Height.Set(38f, 0f);
+        }
+
+        public void SetLastInBlock(bool isLast)
+        {
+            _isLastInBlock = isLast;
         }
 
         protected override void DrawSelf(SpriteBatch spriteBatch)
@@ -53,11 +62,22 @@ namespace SteroidGuide.Common.UI
                 Math.Max(1, fullBounds.Width - (int)_leftIndent),
                 fullBounds.Height);
 
-            // Subtle row background + thin bottom separator to group ingredient stacks.
+            // Subtle block background + inter-row hairline separator (suppressed for last row).
             UIDrawHelper.DrawRect(spriteBatch, bounds, UIPalette.IngRowBg);
+            if (!_isLastInBlock)
+            {
+                UIDrawHelper.DrawRect(spriteBatch,
+                    new Rectangle(bounds.X, bounds.Bottom - 1, bounds.Width, 1),
+                    UIPalette.IngRowSeparator);
+            }
+
+            // Continuous left bar matching the HTML `.ingredients-block` border-left.
+            // Extends 1px below each non-last row so the UIList `ListPadding` gap does not
+            // break the bar visually; the final row stops at its own bottom.
+            int barHeight = bounds.Height + (_isLastInBlock ? 0 : (int)BlockTailExtension);
             UIDrawHelper.DrawRect(spriteBatch,
-                new Rectangle(bounds.X, bounds.Bottom - 1, bounds.Width, 1),
-                UIPalette.IngRowSeparator);
+                new Rectangle(bounds.X, bounds.Y, (int)BlockBarWidth, barHeight),
+                UIPalette.IngBlockBar);
 
             // Icon box
             float iconLeft = bounds.X + LeftPadding;

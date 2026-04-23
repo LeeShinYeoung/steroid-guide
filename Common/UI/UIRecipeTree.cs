@@ -26,9 +26,12 @@ namespace SteroidGuide.Common.UI
         private Func<int, int> _getHaveCount;
 
         private const float DepthIndent = 18f;
+        private const float RowPadding = 6f;
+        private const float ArrowColumnWidth = 14f;
+        private const float IconBoxSize = 34f;
+        private const float IconInnerSize = 30f;
+        private const float NodeTextSpacing = 8f;
         private const float IngredientExtraIndent = 32f;
-        private static readonly Color LineColor = UIPalette.TreeLine;
-        private const int LineThickness = 2;
 
         public override void OnInitialize()
         {
@@ -49,7 +52,7 @@ namespace SteroidGuide.Common.UI
             _list = new UIList();
             _list.Width.Set(-28f, 1f);
             _list.Height.Set(0f, 1f);
-            _list.ListPadding = 2f;
+            _list.ListPadding = 1f;
             _list.SetScrollbar(_scrollbar);
             bg.Append(_list);
 
@@ -94,28 +97,26 @@ namespace SteroidGuide.Common.UI
                 return;
             }
 
-            // Root item title with icon — no tree lines
+            // Root item title with icon — no arrow toggle
             var rootStations = root.UsedRecipe != null ? ResolveStations(root.UsedRecipe) : new List<StationDisplayInfo>();
             var rootChip = BuildStatusChip(root.Status);
-            var rootLine = new UITreeItemLine(root.ItemId, string.Empty, Color.Gold, 0.85f, -1, false, null, TriangleState.None, rootStations, rootChip);
+            var rootLine = new UITreeItemLine(root.ItemId, string.Empty, Color.Gold, 0.85f, -1, TriangleState.None, rootStations, rootChip);
             rootLine.Width.Set(0f, 1f);
-            rootLine.Height.Set(26f, 0f);
+            rootLine.Height.Set(42f, 0f);
             _list.Add(rootLine);
 
-            var emptyParentLines = new List<bool>();
-
             if (root.UsedRecipe != null)
-                AddRecipeConditionLine(root.UsedRecipe, -1, emptyParentLines);
+                AddRecipeConditionLine(root.UsedRecipe, -1);
 
             // The root has no triangle toggle — ingredients must stay visible
             // regardless of `_collapsedItemIds` (which can leak from a prior tree).
             if (root.UsedRecipe != null)
                 AddIngredientRows(root, 0);
 
-            AddChildren(root, 0, emptyParentLines);
+            AddChildren(root, 0);
         }
 
-        private void AddChildren(RecipeTreeNode node, int depth, List<bool> parentLines)
+        private void AddChildren(RecipeTreeNode node, int depth)
         {
             if (node.Children == null || node.Children.Count == 0)
                 return;
@@ -130,11 +131,8 @@ namespace SteroidGuide.Common.UI
                     expandableChildren.Add(child);
             }
 
-            for (int i = 0; i < expandableChildren.Count; i++)
+            foreach (var child in expandableChildren)
             {
-                var child = expandableChildren[i];
-                bool isLast = i == expandableChildren.Count - 1;
-
                 string countStr = child.RequiredCount > 1 ? $" x{child.RequiredCount}" : string.Empty;
 
                 Color color = child.Status switch
@@ -150,9 +148,9 @@ namespace SteroidGuide.Common.UI
                 var stations = ResolveStations(child.UsedRecipe);
                 var chip = BuildStatusChip(child, hasRecipeDetails: true);
                 var line = new UITreeItemLine(child.ItemId, countStr, color, 0.7f,
-                    depth, isLast, parentLines, triangleState, stations, chip);
+                    depth, triangleState, stations, chip);
                 line.Width.Set(0f, 1f);
-                line.Height.Set(26f, 0f);
+                line.Height.Set(42f, 0f);
 
                 var capturedChild = child;
                 line.OnLeftClick += (evt, el) => ToggleCollapse(capturedChild.ItemId);
@@ -162,10 +160,8 @@ namespace SteroidGuide.Common.UI
                 if (!isCollapsed)
                 {
                     AddIngredientRows(child, depth + 1);
-
-                    var childParentLines = new List<bool>(parentLines) { !isLast };
-                    AddRecipeConditionLine(child.UsedRecipe, depth, childParentLines);
-                    AddChildren(child, depth + 1, childParentLines);
+                    AddRecipeConditionLine(child.UsedRecipe, depth);
+                    AddChildren(child, depth + 1);
                 }
             }
         }
@@ -191,6 +187,12 @@ namespace SteroidGuide.Common.UI
             int needed = Math.Max(1, node.RequiredCount);
             int batches = (needed + batchSize - 1) / batchSize;
 
+            // Indent matches HTML: (6 + level*18 + 32). `depth` is the depth of the block
+            // (one below its parent node), so multiply by DepthIndent then add RowPadding
+            // (to align with the parent row's contentX) + IngredientExtraIndent.
+            float leftIndent = depth * DepthIndent + RowPadding + IngredientExtraIndent;
+
+            var blockRows = new List<UIIngredientRow>();
             foreach (var ingredient in node.UsedRecipe.requiredItem)
             {
                 if (ingredient.type <= ItemID.None)
@@ -200,14 +202,16 @@ namespace SteroidGuide.Common.UI
                     continue;
 
                 int ingredientNeeded = ingredient.stack * batches;
-                // Indent matches HTML: (6 + level * 18 + 32). Here `depth` is the depth
-                // at which the block sits (the parent node is drawn at depth*DepthIndent
-                // because UIList children don't inherit tree connector geometry).
-                float leftIndent = depth * DepthIndent + IngredientExtraIndent;
                 var row = new UIIngredientRow(ingredient.type, ingredientNeeded, _getHaveCount, leftIndent);
                 row.Width.Set(0f, 1f);
-                row.Height.Set(22f, 0f);
-                _list.Add(row);
+                row.Height.Set(38f, 0f);
+                blockRows.Add(row);
+            }
+
+            for (int i = 0; i < blockRows.Count; i++)
+            {
+                blockRows[i].SetLastInBlock(i == blockRows.Count - 1);
+                _list.Add(blockRows[i]);
             }
         }
 
@@ -263,7 +267,7 @@ namespace SteroidGuide.Common.UI
             return _collapsedItemIds.Contains(node.ItemId);
         }
 
-        private void AddRecipeConditionLine(Recipe recipe, int depth, List<bool> parentLines)
+        private void AddRecipeConditionLine(Recipe recipe, int depth)
         {
             if (recipe == null)
                 return;
@@ -276,7 +280,7 @@ namespace SteroidGuide.Common.UI
                     condNames.Add(cond.Description.Value);
                 }
                 string text = $"Conditions: {string.Join(", ", condNames)}";
-                AddTreeTextLine(text, new Color(180, 180, 220), 0.65f, depth, parentLines);
+                AddTreeTextLine(text, new Color(180, 180, 220), 0.65f, depth);
             }
         }
 
@@ -360,9 +364,9 @@ namespace SteroidGuide.Common.UI
             return false;
         }
 
-        private void AddTreeTextLine(string text, Color color, float scale, int depth, List<bool> parentLines, Action onClick = null)
+        private void AddTreeTextLine(string text, Color color, float scale, int depth, Action onClick = null)
         {
-            var line = new UITreeTextLine(text, color, scale, depth, parentLines);
+            var line = new UITreeTextLine(text, color, scale, depth);
             line.Width.Set(0f, 1f);
             line.Height.Set(20f, 0f);
             if (onClick != null)
@@ -435,7 +439,8 @@ namespace SteroidGuide.Common.UI
         }
 
         /// <summary>
-        /// Tree node line with item icon and graphic connector lines.
+        /// Tree node line rendered as: [arrow column | icon box | name | chip | station badges].
+        /// No connector lines — the design groups children via the ingredient-block left bar.
         /// </summary>
         private class UITreeItemLine : UIElement
         {
@@ -444,16 +449,13 @@ namespace SteroidGuide.Common.UI
             private readonly Color _color;
             private readonly float _scale;
             private readonly int _depth;
-            private readonly bool _isLast;
-            private readonly List<bool> _parentLines;
             private readonly TriangleState _triangleState;
             private readonly List<StationDisplayInfo> _stations;
             private readonly StatusChipInfo _statusChip;
 
             private const float TriangleSize = 8f;
-            private const float IconSize = 20f;
-            private const float BaseRowHeight = 26f;
-            private const float TextSpacing = 4f;
+            private const float ArrowCenterOffset = 5f;
+            private const float BaseRowHeight = 42f;
             private const float InlineBadgeSpacing = 8f;
             private const float BadgeSize = 24f;
             private const float BadgeSpacing = 6f;
@@ -468,7 +470,7 @@ namespace SteroidGuide.Common.UI
             private static readonly Color BadgeHoverColor = UIPalette.StationHoverBg;
 
             public UITreeItemLine(int itemId, string suffix, Color color, float scale,
-                int depth, bool isLast, List<bool> parentLines, TriangleState triangleState,
+                int depth, TriangleState triangleState,
                 List<StationDisplayInfo> stations = default,
                 StatusChipInfo chip = default)
             {
@@ -477,8 +479,6 @@ namespace SteroidGuide.Common.UI
                 _color = color;
                 _scale = scale;
                 _depth = depth;
-                _isLast = isLast;
-                _parentLines = parentLines != null ? new List<bool>(parentLines) : null;
                 _triangleState = triangleState;
                 _stations = stations ?? new List<StationDisplayInfo>();
                 _statusChip = chip;
@@ -503,29 +503,33 @@ namespace SteroidGuide.Common.UI
                 float y = dims.Y;
                 float centerY = y + BaseRowHeight / 2f;
 
-                // Draw graphic tree lines
-                if (_depth >= 0)
-                    DrawTreeLines(spriteBatch, x, y, dims.Height, centerY);
-
-                // Content area starts after tree connector region
                 float contentX = GetContentX(x);
                 bool rowHovered = dims.ToRectangle().Contains(Main.mouseX, Main.mouseY);
 
-                // Draw triangle toggle for collapsible nodes
-                float triangleWidth = 0f;
+                // Arrow sits in a fixed-width column at the row's left (only for collapsible rows)
                 if (_triangleState != TriangleState.None)
                 {
-                    Color triColor = rowHovered ? Color.Gold : Color.White;
-                    DrawTriangle(spriteBatch, new Vector2(contentX, centerY), _triangleState, triColor);
-                    triangleWidth = TriangleSize + 4f;
+                    Color triColor = rowHovered ? UIPalette.TreeArrowHover : UIPalette.TreeArrow;
+                    DrawTriangle(spriteBatch,
+                        new Vector2(contentX + ArrowCenterOffset, centerY),
+                        _triangleState, triColor);
                 }
 
-                // Draw item icon (20x20)
-                float iconX = contentX + triangleWidth + IconSize / 2f;
-                UIItemRenderingHelper.TryDrawItemIcon(spriteBatch, _itemId, new Vector2(iconX, centerY), IconSize);
+                // Icon box (22x22) — bg + 1px border, with the item icon drawn inside
+                float iconBoxLeft = GetIconBoxLeft(x);
+                var iconBoxRect = new Rectangle(
+                    SnapToPixel(iconBoxLeft),
+                    SnapToPixel(centerY - IconBoxSize * 0.5f),
+                    (int)IconBoxSize,
+                    (int)IconBoxSize);
+                UIDrawHelper.DrawRect(spriteBatch, iconBoxRect, UIPalette.TreeIconBg);
+                UIDrawHelper.DrawBorder(spriteBatch, iconBoxRect, UIPalette.TreeIconBorder, 1);
+                UIItemRenderingHelper.TryDrawItemIcon(spriteBatch, _itemId,
+                    new Vector2(iconBoxRect.X + IconBoxSize * 0.5f, iconBoxRect.Y + IconBoxSize * 0.5f),
+                    IconInnerSize);
 
-                // Draw item name + count suffix
-                float textX = contentX + triangleWidth + IconSize + TextSpacing;
+                // Name + count suffix, to the right of the icon box
+                float textX = iconBoxRect.Right + NodeTextSpacing;
                 string text = GetDisplayText();
                 Vector2 textPosition = GetCenteredBorderStringPosition(text, textX, centerY, _scale);
                 Utils.DrawBorderString(spriteBatch, text, textPosition, _color, _scale);
@@ -578,9 +582,7 @@ namespace SteroidGuide.Common.UI
                 if (_stations.Count == 0)
                     return BaseRowHeight;
 
-                float contentX = GetContentX(0f);
-                float triangleWidth = _triangleState != TriangleState.None ? TriangleSize + 4f : 0f;
-                float textX = contentX + triangleWidth + IconSize + TextSpacing;
+                float textX = GetTextOriginX(0f);
                 string text = GetDisplayText();
                 float textWidth = FontAssets.MouseText.Value.MeasureString(text).X * _scale;
                 float rowStart = textX + textWidth + InlineBadgeSpacing;
@@ -601,9 +603,7 @@ namespace SteroidGuide.Common.UI
                 if (_stations.Count == 0)
                     return BaseRowHeight;
 
-                float contentX = GetContentX(x);
-                float triangleWidth = _triangleState != TriangleState.None ? TriangleSize + 4f : 0f;
-                float wrappedRowStartX = contentX + triangleWidth + IconSize + TextSpacing;
+                float wrappedRowStartX = GetTextOriginX(x);
                 float contentRight = x + width - RightPadding;
                 float currentX = startX;
                 float rowStartX = startX;
@@ -661,7 +661,20 @@ namespace SteroidGuide.Common.UI
 
             private float GetContentX(float x)
             {
-                return _depth >= 0 ? x + (_depth + 1) * DepthIndent : x;
+                // Root sits flush-left with no padding or arrow column. Children use
+                // HTML's padding-left = 6 + level*18 plus the arrow column.
+                return _depth < 0 ? x : x + (_depth + 1) * DepthIndent + RowPadding;
+            }
+
+            private float GetIconBoxLeft(float x)
+            {
+                // Root has no arrow column; its icon sits at contentX directly.
+                return _depth < 0 ? GetContentX(x) : GetContentX(x) + ArrowColumnWidth;
+            }
+
+            private float GetTextOriginX(float x)
+            {
+                return GetIconBoxLeft(x) + IconBoxSize + NodeTextSpacing;
             }
 
             private static void DrawTriangle(SpriteBatch spriteBatch, Vector2 center, TriangleState state, Color color)
@@ -699,44 +712,6 @@ namespace SteroidGuide.Common.UI
                             color);
                     }
                 }
-            }
-
-            private void DrawTreeLines(SpriteBatch spriteBatch, float x, float y, float height, float centerY)
-            {
-                var pixel = TextureAssets.MagicPixel.Value;
-
-                // Continuation vertical lines for ancestors
-                if (_parentLines != null)
-                {
-                    for (int d = 0; d < _parentLines.Count; d++)
-                    {
-                        if (_parentLines[d])
-                        {
-                            float lineX = x + d * DepthIndent + DepthIndent / 2f;
-                            spriteBatch.Draw(pixel,
-                                new Rectangle((int)(lineX - LineThickness / 2f), (int)y,
-                                    LineThickness, (int)height),
-                                LineColor);
-                        }
-                    }
-                }
-
-                // Connector at current depth
-                float connX = x + _depth * DepthIndent + DepthIndent / 2f;
-
-                // Vertical part: top to center (last child, L-shape) or top to bottom
-                float vertBottom = _isLast ? centerY : y + height;
-                spriteBatch.Draw(pixel,
-                    new Rectangle((int)(connX - LineThickness / 2f), (int)y,
-                        LineThickness, (int)(vertBottom - y)),
-                    LineColor);
-
-                // Horizontal part: from connector to content area
-                float horzRight = x + (_depth + 1) * DepthIndent;
-                spriteBatch.Draw(pixel,
-                    new Rectangle((int)connX, (int)(centerY - LineThickness / 2f),
-                        (int)(horzRight - connX), LineThickness),
-                    LineColor);
             }
 
             private static float GetBadgeWidth(StationDisplayInfo station)
@@ -801,8 +776,7 @@ namespace SteroidGuide.Common.UI
         }
 
         /// <summary>
-        /// Text-only tree line that draws ancestor continuation lines with pixel-based indentation.
-        /// Used for conditions.
+        /// Text-only tree line (condition/meta) aligned with the tree node name column.
         /// </summary>
         private class UITreeTextLine : UIElement
         {
@@ -810,44 +784,25 @@ namespace SteroidGuide.Common.UI
             private readonly Color _color;
             private readonly float _scale;
             private readonly int _depth;
-            private readonly List<bool> _parentLines;
 
-            public UITreeTextLine(string text, Color color, float scale, int depth, List<bool> parentLines)
+            public UITreeTextLine(string text, Color color, float scale, int depth)
             {
                 _text = text;
                 _color = color;
                 _scale = scale;
                 _depth = depth;
-                _parentLines = parentLines != null ? new List<bool>(parentLines) : null;
             }
 
             protected override void DrawSelf(SpriteBatch spriteBatch)
             {
                 var dims = GetDimensions();
-                float x = dims.X;
-                float y = dims.Y;
-                float centerY = y + dims.Height / 2f;
+                float centerY = dims.Y + dims.Height / 2f;
 
-                // Draw continuation vertical lines for ancestors
-                if (_parentLines != null)
-                {
-                    var pixel = TextureAssets.MagicPixel.Value;
-                    for (int d = 0; d < _parentLines.Count; d++)
-                    {
-                        if (_parentLines[d])
-                        {
-                            float lineX = x + d * DepthIndent + DepthIndent / 2f;
-                            spriteBatch.Draw(pixel,
-                                new Rectangle((int)(lineX - LineThickness / 2f), (int)y,
-                                    LineThickness, (int)dims.Height),
-                                LineColor);
-                        }
-                    }
-                }
-
-                // Content starts after tree area
-                float contentX = x + (_depth + 1) * DepthIndent;
-                Vector2 textPosition = GetCenteredBorderStringPosition(_text, contentX, centerY, _scale);
+                float iconBoxLeft = _depth < 0
+                    ? dims.X
+                    : dims.X + (_depth + 1) * DepthIndent + RowPadding + ArrowColumnWidth;
+                float textX = iconBoxLeft + IconBoxSize + NodeTextSpacing;
+                Vector2 textPosition = GetCenteredBorderStringPosition(_text, textX, centerY, _scale);
                 Utils.DrawBorderString(spriteBatch, _text, textPosition, _color, _scale);
             }
         }

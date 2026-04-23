@@ -107,7 +107,11 @@ namespace SteroidGuide.Common.UI
         public static readonly Color StationHoverBg = new(40, 56, 104, 222);
         public static readonly Color StationText = new(112, 136, 184);
 
-        // Recipe tree lines
-        public static readonly Color TreeLine = new(58, 64, 112, 160);
+        // Recipe tree rows
+        public static readonly Color TreeIconBg = new(25, 28, 58, 204);
+        public static readonly Color TreeIconBorder = new(42, 48, 96);
+        public static readonly Color TreeArrow = new(64, 80, 160);
+        public static readonly Color TreeArrowHover = new(160, 176, 224);
+        public static readonly Color IngBlockBar = new(42, 48, 96);
     }
 }
