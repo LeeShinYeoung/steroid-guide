@@ -42,12 +42,6 @@ namespace SteroidGuide.Common.UI
         public static readonly Color CatCheckActiveBorder = new(112, 144, 224);
         public static readonly Color CatCheckInner = new(160, 192, 255);
 
-        // Rarity (sort) button — dot palette mirrors the vanilla rarity spectrum
-        public static readonly Color RarityDotGray = new(136, 136, 136);
-        public static readonly Color RarityDotBlue = new(64, 144, 255);
-        public static readonly Color RarityDotPurple = new(176, 64, 255);
-        public static readonly Color RarityDotYellow = new(255, 204, 0);
-
         // Search box
         public static readonly Color SearchBg = new(14, 16, 34, 230);
         public static readonly Color SearchBorder = new(58, 64, 112);

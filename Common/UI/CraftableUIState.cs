@@ -88,7 +88,7 @@ namespace SteroidGuide.Common.UI
         private int _updateCounter;
         private Task<AnalysisResult> _pendingAnalysisTask;
         private CancellationTokenSource _analysisCts;
-        private int ItemsPerPage => _itemGrid?.ItemsPerPage ?? 21;
+        private int ItemsPerPage => _itemGrid?.ItemsPerPage ?? 18;
 
         // Layout — new 3-column redesign
         private const float MainPanelWidth = 1000f;
@@ -249,7 +249,7 @@ namespace SteroidGuide.Common.UI
             }
 
             // Rarity filter / sort button in the footer
-            _sortButton = new UISortButton(drawDots: true);
+            _sortButton = new UISortButton();
             _sortButton.Top.Set(-CategoryFooterHeight - CategoryFooterPadding, 1f);
             _sortButton.Left.Set(CategoryFooterPadding, 0f);
             _sortButton.Width.Set(-(CategoryFooterPadding * 2f), 1f);

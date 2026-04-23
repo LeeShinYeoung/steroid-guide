@@ -28,10 +28,10 @@ namespace SteroidGuide.Common.UI
         private List<int> _items = new();
         private int _selectedItemId = -1;
 
-        private const int TargetColumns = 7;
+        private const int TargetColumns = 6;
         private const int DefaultRowsPerPage = 6;
         private const float CellPadding = 2f;
-        private const float IconMaxDim = 28f;
+        private const float IconMaxDim = 32f;
         private const float NameBottomPadding = 3f;
         private const float NameScale = 0.55f;
         private string _emptyStateText = "No craftable items found.";
