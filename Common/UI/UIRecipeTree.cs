@@ -102,19 +102,14 @@ namespace SteroidGuide.Common.UI
             rootLine.Height.Set(26f, 0f);
             _list.Add(rootLine);
 
-            // Tree nodes
             var emptyParentLines = new List<bool>();
 
             if (root.UsedRecipe != null)
                 AddRecipeConditionLine(root.UsedRecipe, -1, emptyParentLines);
 
-            // Root ingredient rows appear when its recipe is visible — matches HTML behaviour
-            // where the root ingredients are rendered under the root node as flat rows.
-            // The root has no triangle toggle, so ingredients must stay visible regardless of
-            // `_collapsedItemIds` membership (which can leak from a prior tree with the same id)
-            // unless the root actually has displayable children to hide.
-            bool rootHasDisplayableChildren = HasDisplayableRecipeChildren(root);
-            if (root.UsedRecipe != null && (!rootHasDisplayableChildren || !IsCollapsed(root)))
+            // The root has no triangle toggle — ingredients must stay visible
+            // regardless of `_collapsedItemIds` (which can leak from a prior tree).
+            if (root.UsedRecipe != null)
                 AddIngredientRows(root, 0);
 
             AddChildren(root, 0, emptyParentLines);
@@ -125,10 +120,20 @@ namespace SteroidGuide.Common.UI
             if (node.Children == null || node.Children.Count == 0)
                 return;
 
-            for (int i = 0; i < node.Children.Count; i++)
+            // Only children with their own expandable sub-recipe are rendered as tree rows.
+            // Leaf ingredients (no sub-recipe) are represented by the parent's flat ingredient
+            // rows, matching the HTML design's disjoint `children` / `ingredients` split.
+            var expandableChildren = new List<RecipeTreeNode>();
+            foreach (var child in node.Children)
             {
-                var child = node.Children[i];
-                bool isLast = i == node.Children.Count - 1;
+                if (HasDisplayableRecipeChildren(child))
+                    expandableChildren.Add(child);
+            }
+
+            for (int i = 0; i < expandableChildren.Count; i++)
+            {
+                var child = expandableChildren[i];
+                bool isLast = i == expandableChildren.Count - 1;
 
                 string countStr = child.RequiredCount > 1 ? $" x{child.RequiredCount}" : string.Empty;
 
@@ -139,48 +144,27 @@ namespace SteroidGuide.Common.UI
                     _ => Color.IndianRed
                 };
 
-                bool hasRecipeDetails = HasRecipeDetails(child);
-                bool hasDisplayableChildren = HasDisplayableRecipeChildren(child);
                 bool isCollapsed = IsCollapsed(child);
+                TriangleState triangleState = isCollapsed ? TriangleState.Collapsed : TriangleState.Expanded;
 
-                TriangleState triangleState = TriangleState.None;
-                if (hasDisplayableChildren)
-                    triangleState = isCollapsed ? TriangleState.Collapsed : TriangleState.Expanded;
-
-                var stations = child.UsedRecipe != null ? ResolveStations(child.UsedRecipe) : new List<StationDisplayInfo>();
-                var chip = BuildStatusChip(child, hasRecipeDetails);
+                var stations = ResolveStations(child.UsedRecipe);
+                var chip = BuildStatusChip(child, hasRecipeDetails: true);
                 var line = new UITreeItemLine(child.ItemId, countStr, color, 0.7f,
                     depth, isLast, parentLines, triangleState, stations, chip);
                 line.Width.Set(0f, 1f);
                 line.Height.Set(26f, 0f);
 
-                if (hasDisplayableChildren)
-                {
-                    var capturedChild = child;
-                    line.OnLeftClick += (evt, el) => ToggleCollapse(capturedChild.ItemId);
-                }
+                var capturedChild = child;
+                line.OnLeftClick += (evt, el) => ToggleCollapse(capturedChild.ItemId);
 
                 _list.Add(line);
 
-                // Ingredient rows (flat) appear for any expanded node that has a recipe,
-                // regardless of whether the subtree has displayable children. This mirrors
-                // the HTML mock where every expanded node shows its direct ingredients.
-                // When a node has no displayable children there is no triangle toggle, so
-                // ingredients must remain visible regardless of `_collapsedItemIds`
-                // membership (which can leak from a prior tree using the same item id).
-                bool showRecipeDetails = child.UsedRecipe != null && (!hasDisplayableChildren || !isCollapsed);
-                if (showRecipeDetails)
+                if (!isCollapsed)
                 {
                     AddIngredientRows(child, depth + 1);
-                }
 
-                // Show children if not collapsed
-                if (hasRecipeDetails && !isCollapsed)
-                {
                     var childParentLines = new List<bool>(parentLines) { !isLast };
-
                     AddRecipeConditionLine(child.UsedRecipe, depth, childParentLines);
-
                     AddChildren(child, depth + 1, childParentLines);
                 }
             }
@@ -191,6 +175,18 @@ namespace SteroidGuide.Common.UI
             if (node?.UsedRecipe == null)
                 return;
 
+            // Ingredients that will render as expandable tree children must NOT also appear
+            // as flat rows — the HTML design treats `children` and `ingredients` as disjoint sets.
+            var expandableChildIds = new HashSet<int>();
+            if (node.Children != null)
+            {
+                foreach (var child in node.Children)
+                {
+                    if (HasDisplayableRecipeChildren(child))
+                        expandableChildIds.Add(child.ItemId);
+                }
+            }
+
             int batchSize = Math.Max(1, node.UsedRecipe.createItem.stack);
             int needed = Math.Max(1, node.RequiredCount);
             int batches = (needed + batchSize - 1) / batchSize;
@@ -198,6 +194,9 @@ namespace SteroidGuide.Common.UI
             foreach (var ingredient in node.UsedRecipe.requiredItem)
             {
                 if (ingredient.type <= ItemID.None)
+                    continue;
+
+                if (expandableChildIds.Contains(ingredient.type))
                     continue;
 
                 int ingredientNeeded = ingredient.stack * batches;
