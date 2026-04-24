@@ -1,4 +1,4 @@
-A new town NPC who lists every item you can craft right now — recipes of recipes of recipes, traced all the way to raw materials.
+A new town NPC who looks at your inventory and every chest within 60 tiles of you, and tells you exactly what you can craft right now.
 
 Works with every mod that registers recipes through tModLoader — Calamity and more.
 
