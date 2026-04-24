@@ -28,6 +28,9 @@ namespace SteroidGuide
                     if (Main.netMode != NetmodeID.MultiplayerClient)
                         break;
                     int chestIndex = reader.ReadInt32();
+                    // Order matters: snapshot first so any concurrent scan observes the new contents
+                    // together with the new timestamp, then flip the sync timestamp.
+                    ItemScanner.UpdateChestContentsFromMainChest(chestIndex);
                     ItemScanner.MarkChestSynced(chestIndex);
                     break;
                 }
