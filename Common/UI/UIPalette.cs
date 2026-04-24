@@ -112,6 +112,7 @@ namespace SteroidGuide.Common.UI
         public static readonly Color TreeIconBorder = new(42, 48, 96);
         public static readonly Color TreeArrow = new(64, 80, 160);
         public static readonly Color TreeArrowHover = new(160, 176, 224);
+        public static readonly Color TreeOwnedCount = new(120, 128, 160);
         public static readonly Color IngBlockBar = new(42, 48, 96);
     }
 }

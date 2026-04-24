@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Terraria;
@@ -25,7 +26,7 @@ namespace SteroidGuide.Common.UI
         // Per-frame scan lookup for ingredient rows (avoids rebuilding the tree on scan change).
         private Func<int, int> _getHaveCount;
 
-        private const float DepthIndent = 18f;
+        private const float DepthIndent = 38f;
         private const float RowPadding = 6f;
         private const float ArrowColumnWidth = 14f;
         private const float IconBoxSize = 34f;
@@ -148,7 +149,9 @@ namespace SteroidGuide.Common.UI
                 var stations = ResolveStations(child.UsedRecipe);
                 var chip = BuildStatusChip(child, hasRecipeDetails: true);
                 var line = new UITreeItemLine(child.ItemId, countStr, color, 0.7f,
-                    depth, triangleState, stations, chip);
+                    depth, triangleState, stations, chip,
+                    _getHaveCount,
+                    child.Status == NodeStatus.Craftable);
                 line.Width.Set(0f, 1f);
                 line.Height.Set(42f, 0f);
 
@@ -219,8 +222,9 @@ namespace SteroidGuide.Common.UI
         {
             return status switch
             {
-                NodeStatus.Craftable => new StatusChipInfo("CRAFTABLE",
-                    UIPalette.ChipCraftableBg, UIPalette.ChipCraftableBorder, UIPalette.ChipCraftableText),
+                // CRAFTABLE chips are intentionally suppressed in the recipe tree —
+                // the tree now communicates craftable state via node color/owned count only.
+                NodeStatus.Craftable => default,
                 NodeStatus.Owned => new StatusChipInfo(string.Empty,
                     UIPalette.ChipOwnedBg, UIPalette.ChipOwnedBorder, UIPalette.ChipOwnedText),
                 _ => new StatusChipInfo("MISSING",
@@ -234,8 +238,9 @@ namespace SteroidGuide.Common.UI
             {
                 NodeStatus.Owned => new StatusChipInfo($"OWNED x{node.OwnedCount}",
                     UIPalette.ChipOwnedBg, UIPalette.ChipOwnedBorder, UIPalette.ChipOwnedText),
-                NodeStatus.Craftable => new StatusChipInfo("CRAFTABLE",
-                    UIPalette.ChipCraftableBg, UIPalette.ChipCraftableBorder, UIPalette.ChipCraftableText),
+                // CRAFTABLE chips are intentionally suppressed in the recipe tree —
+                // intermediate craftable nodes surface an owned-count label on the right edge instead.
+                NodeStatus.Craftable => default,
                 _ => new StatusChipInfo("MISSING",
                     UIPalette.ChipMissingBg, UIPalette.ChipMissingBorder, UIPalette.ChipMissingText),
             };
@@ -452,6 +457,8 @@ namespace SteroidGuide.Common.UI
             private readonly TriangleState _triangleState;
             private readonly List<StationDisplayInfo> _stations;
             private readonly StatusChipInfo _statusChip;
+            private readonly Func<int, int> _haveLookup;
+            private readonly bool _showOwnedLabel;
 
             private const float TriangleSize = 8f;
             private const float ArrowCenterOffset = 5f;
@@ -466,13 +473,22 @@ namespace SteroidGuide.Common.UI
             private const float ChipHeight = 16f;
             private const float ChipHorizontalPadding = 6f;
             private const float ChipScale = 0.58f;
+            private const float OwnedLabelScale = 0.7f;
+            private const float OwnedLabelGap = 8f;
+            // Right inset for the owned-count label. Matches `UIIngredientRow.RightPadding`
+            // so the gray intermediate count and the leaf `have/need` text share the same
+            // vertical right edge. Kept independent of `RightPadding` (which governs
+            // station badges) so station layout is unaffected.
+            private const float OwnedLabelRightPadding = 10f;
 
             private static readonly Color BadgeHoverColor = UIPalette.StationHoverBg;
 
             public UITreeItemLine(int itemId, string suffix, Color color, float scale,
                 int depth, TriangleState triangleState,
                 List<StationDisplayInfo> stations = default,
-                StatusChipInfo chip = default)
+                StatusChipInfo chip = default,
+                Func<int, int> haveLookup = null,
+                bool showOwnedLabel = false)
             {
                 _itemId = itemId;
                 _suffix = suffix;
@@ -482,6 +498,8 @@ namespace SteroidGuide.Common.UI
                 _triangleState = triangleState;
                 _stations = stations ?? new List<StationDisplayInfo>();
                 _statusChip = chip;
+                _haveLookup = haveLookup;
+                _showOwnedLabel = showOwnedLabel;
             }
 
             public override void Recalculate()
@@ -539,16 +557,36 @@ namespace SteroidGuide.Common.UI
 
                 bool stationHovered = false;
 
-                // Status chip (CRAFTABLE/MISSING/OWNED) — drawn just to the right of the text,
-                // before any station badges.
+                // Status chip (MISSING/OWNED) — drawn just to the right of the text,
+                // before any station badges. CRAFTABLE is suppressed via BuildStatusChip.
                 if (_statusChip.IsVisible)
                 {
                     Rectangle chipRect = DrawStatusChip(spriteBatch, chipStartX, centerY);
                     chipStartX = chipRect.Right + BadgeSpacing;
                 }
 
+                // Reserve a slot on the far right for the owned-count label (intermediate craftable
+                // nodes only). Stations must stop before this slot so they cannot overlap the count.
+                // The reserved width accounts for the extra right inset used by the label so stations
+                // (which use the smaller `RightPadding`) wrap before intruding on the label column.
+                float ownedLabelWidth = GetOwnedLabelWidth(out string ownedLabel);
+                float rightReserve = ownedLabelWidth > 0f
+                    ? ownedLabelWidth + OwnedLabelGap + (OwnedLabelRightPadding - RightPadding)
+                    : 0f;
+
                 if (_stations.Count > 0)
-                    LayoutBadges(spriteBatch, x, y, dims.Width, chipStartX, out stationHovered);
+                    LayoutBadges(spriteBatch, x, y, dims.Width, chipStartX, rightReserve, out stationHovered);
+
+                if (ownedLabelWidth > 0f)
+                {
+                    Vector2 ownedSize = FontAssets.MouseText.Value.MeasureString(ownedLabel) * OwnedLabelScale;
+                    // Anchor the right edge at `OwnedLabelRightPadding` so it aligns with the
+                    // leaf ingredient count's right edge (`UIIngredientRow.RightPadding = 10f`).
+                    float ownedX = dims.X + dims.Width - OwnedLabelRightPadding - ownedSize.X;
+                    float ownedY = centerY - ownedSize.Y * 0.5f;
+                    Utils.DrawBorderString(spriteBatch, ownedLabel,
+                        new Vector2(ownedX, ownedY), UIPalette.TreeOwnedCount, OwnedLabelScale);
+                }
 
                 var rect = dims.ToRectangle();
                 if (!stationHovered &&
@@ -558,6 +596,18 @@ namespace SteroidGuide.Common.UI
                     Main.HoverItem = hoverItem.Clone();
                     Main.hoverItemName = hoverItem.Name;
                 }
+            }
+
+            private float GetOwnedLabelWidth(out string ownedLabel)
+            {
+                ownedLabel = string.Empty;
+
+                if (!_showOwnedLabel || _haveLookup == null)
+                    return 0f;
+
+                int owned = Math.Max(0, _haveLookup(_itemId));
+                ownedLabel = owned.ToString(CultureInfo.InvariantCulture);
+                return FontAssets.MouseText.Value.MeasureString(ownedLabel).X * OwnedLabelScale;
             }
 
             private Rectangle DrawStatusChip(SpriteBatch spriteBatch, float leftX, float centerY)
@@ -593,10 +643,15 @@ namespace SteroidGuide.Common.UI
                     rowStart += chipSize.X + ChipHorizontalPadding * 2f + BadgeSpacing;
                 }
 
-                return LayoutBadges(null, 0f, 0f, width, rowStart, out _);
+                float ownedLabelWidth = GetOwnedLabelWidth(out _);
+                float rightReserve = ownedLabelWidth > 0f
+                    ? ownedLabelWidth + OwnedLabelGap + (OwnedLabelRightPadding - RightPadding)
+                    : 0f;
+
+                return LayoutBadges(null, 0f, 0f, width, rowStart, rightReserve, out _);
             }
 
-            private float LayoutBadges(SpriteBatch spriteBatch, float x, float y, float width, float startX, out bool hoveredAny)
+            private float LayoutBadges(SpriteBatch spriteBatch, float x, float y, float width, float startX, float rightReserve, out bool hoveredAny)
             {
                 hoveredAny = false;
 
@@ -604,7 +659,7 @@ namespace SteroidGuide.Common.UI
                     return BaseRowHeight;
 
                 float wrappedRowStartX = GetTextOriginX(x);
-                float contentRight = x + width - RightPadding;
+                float contentRight = x + width - RightPadding - rightReserve;
                 float currentX = startX;
                 float rowStartX = startX;
                 float centerY = y + BaseRowHeight * 0.5f;
@@ -661,15 +716,16 @@ namespace SteroidGuide.Common.UI
 
             private float GetContentX(float x)
             {
-                // Root sits flush-left with no padding or arrow column. Children use
-                // HTML's padding-left = 6 + level*18 plus the arrow column.
-                return _depth < 0 ? x : x + (_depth + 1) * DepthIndent + RowPadding;
+                // Root sits flush-left. Children step by DepthIndent per level so the
+                // root→child jump matches every subsequent parent→child jump.
+                // contentX marks the arrow column's left edge; iconLeft sits one column to the right.
+                return _depth < 0 ? x : x + (_depth + 1) * DepthIndent - ArrowColumnWidth;
             }
 
             private float GetIconBoxLeft(float x)
             {
                 // Root has no arrow column; its icon sits at contentX directly.
-                return _depth < 0 ? GetContentX(x) : GetContentX(x) + ArrowColumnWidth;
+                return _depth < 0 ? x : x + (_depth + 1) * DepthIndent;
             }
 
             private float GetTextOriginX(float x)
@@ -800,7 +856,7 @@ namespace SteroidGuide.Common.UI
 
                 float iconBoxLeft = _depth < 0
                     ? dims.X
-                    : dims.X + (_depth + 1) * DepthIndent + RowPadding + ArrowColumnWidth;
+                    : dims.X + (_depth + 1) * DepthIndent;
                 float textX = iconBoxLeft + IconBoxSize + NodeTextSpacing;
                 Vector2 textPosition = GetCenteredBorderStringPosition(_text, textX, centerY, _scale);
                 Utils.DrawBorderString(spriteBatch, _text, textPosition, _color, _scale);
