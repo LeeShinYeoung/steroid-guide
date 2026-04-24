@@ -231,10 +231,10 @@ namespace SteroidGuide.Common.UI
             EmitRow(entries, openBusIndexStack, rootLine, branchDepth: -1);
             _list.Add(rootLine);
 
-            // Root condition line is emitted BEFORE the root's child bus opens, so it gets
-            // empty connector info (no throughs, no branch). Matches "root has no own line."
-            if (root.UsedRecipe != null)
-                EmitConditionLine(entries, openBusIndexStack, root.UsedRecipe, -1);
+            // Condition line emission disabled — shimmer/transmutation conditions rendered as
+            // "Conditions: …" rows confused users into treating them as craftable recipes.
+            // if (root.UsedRecipe != null)
+            //     EmitConditionLine(entries, openBusIndexStack, root.UsedRecipe, -1);
 
             if (root.UsedRecipe != null || (root.Children != null && root.Children.Count > 0))
             {
@@ -343,7 +343,7 @@ namespace SteroidGuide.Common.UI
                     int grandBusIndex = OpenBus(buses, openBusIndexStack, depth: childDepth + 1);
 
                     EmitIngredientRows(entries, openBusIndexStack, child, depth: childDepth + 1);
-                    EmitConditionLine(entries, openBusIndexStack, child.UsedRecipe, childDepth);
+                    // EmitConditionLine(entries, openBusIndexStack, child.UsedRecipe, childDepth);
                     EmitChildren(entries, buses, openBusIndexStack, child, parentDepth: childDepth);
 
                     CloseBus(buses, openBusIndexStack, grandBusIndex);
