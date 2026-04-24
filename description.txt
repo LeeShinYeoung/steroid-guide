@@ -1,6 +1,4 @@
-A new town NPC who looks at everything in your inventory and nearby chests, and tells you exactly what you can craft — right now.
-
-No menus. No chest-by-chest checking. Just talk to him.
+A new town NPC who lists every item you can craft right now — recipes of recipes of recipes, traced all the way to raw materials.
 
 Works with every mod that registers recipes through tModLoader — Calamity and more.
 
