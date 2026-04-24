@@ -141,7 +141,6 @@ namespace SteroidGuide.Common.UI
             {
                 _selectedItemId = -1;
                 _recipeTree?.ClearTree();
-                _recipeTreeHeader?.ClearSelectedItemName();
             }
 
             _currentPage = 0;
@@ -231,8 +230,6 @@ namespace SteroidGuide.Common.UI
         {
             _selectedItemId = itemId;
             UpdateGrid();
-
-            _recipeTreeHeader?.SetSelectedItemName(UIItemRenderingHelper.GetDisplayNameOrFallback(itemId));
 
             if (_latestScanResult.HasValue && _latestScanResult.Value.Items != null && RecipeGraphSystem.Graph != null)
             {

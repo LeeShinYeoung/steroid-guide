@@ -68,12 +68,6 @@ namespace SteroidGuide.Common.UI
         public static readonly Color PageBtnArrowHover = new(160, 176, 224);
         public static readonly Color PageText = new(80, 96, 160);
 
-        // Recipe header
-        public static readonly Color RecipeHeaderBg = new(35, 40, 80, 242);
-        public static readonly Color RecipeHeaderBorder = new(42, 46, 96);
-        public static readonly Color RecipeHeaderTitle = new(128, 144, 208);
-        public static readonly Color RecipeHeaderName = new(192, 204, 232);
-
         // Stock indicator
         public static readonly Color StockOk = new(80, 192, 112);
         public static readonly Color StockWarn = new(208, 160, 48);

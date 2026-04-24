@@ -29,8 +29,6 @@ namespace SteroidGuide.Common.UI
         private const string NearbyChestStatusAnalyzingFallback = "Referencing {0} nearby chests · analyzing...";
         private const string SearchPlaceholderKey = "Mods.SteroidGuide.UI.SearchPlaceholder";
         private const string SearchPlaceholderFallback = "Search craftable items...";
-        private const string RecipeTreeTitleKey = "Mods.SteroidGuide.UI.RecipeTreeTitle";
-        private const string RecipeTreeTitleFallback = "RECIPE TREE";
 
         private static readonly (FilterCategory Category, string LabelKey, string FallbackLabel)[] FilterDefinitions =
         [
@@ -73,7 +71,6 @@ namespace SteroidGuide.Common.UI
         private UICenteredText _pageText;
 
         // Recipe tree
-        private UIRecipeTreeHeader _recipeTreeHeader;
         private UIRecipeTree _recipeTree;
 
         // State
@@ -104,7 +101,6 @@ namespace SteroidGuide.Common.UI
         private const float PaginationArrowHeight = 22f;
         private const float PaginationTextGap = 10f;
         private const float PaginationTextScale = 0.72f;
-        private const float RecipeHeaderHeight = 28f;
         private const float CategoryRowHeight = 26f;
         private const float CategoryRowSpacing = 1f;
         private const float CategorySectionTop = 8f;
@@ -347,19 +343,11 @@ namespace SteroidGuide.Common.UI
             bg.Height.Set(0f, 1f);
             column.Append(bg);
 
-            _recipeTreeHeader = new UIRecipeTreeHeader(
-                ResolveLocalizedText(RecipeTreeTitleKey, RecipeTreeTitleFallback));
-            _recipeTreeHeader.Top.Set(0f, 0f);
-            _recipeTreeHeader.Left.Set(0f, 0f);
-            _recipeTreeHeader.Width.Set(0f, 1f);
-            _recipeTreeHeader.Height.Set(RecipeHeaderHeight, 0f);
-            column.Append(_recipeTreeHeader);
-
             _recipeTree = new UIRecipeTree();
-            _recipeTree.Top.Set(RecipeHeaderHeight, 0f);
+            _recipeTree.Top.Set(0f, 0f);
             _recipeTree.Left.Set(0f, 0f);
             _recipeTree.Width.Set(0f, 1f);
-            _recipeTree.Height.Set(-RecipeHeaderHeight, 1f);
+            _recipeTree.Height.Set(0f, 1f);
             _recipeTree.SetHaveLookup(GetScanHaveCount);
             column.Append(_recipeTree);
         }
@@ -421,7 +409,6 @@ namespace SteroidGuide.Common.UI
             _sortButton?.SetState(GetSortLabel(_currentSort), _sortDropdownOpen);
             _searchTextBox?.Reset();
             _recipeTree?.ClearTree();
-            _recipeTreeHeader?.ClearSelectedItemName();
             UpdateFilterSelectionStates();
             _lastStatusText = null;
             RunAnalysis();
