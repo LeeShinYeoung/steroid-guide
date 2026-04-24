@@ -10,6 +10,7 @@ namespace SteroidGuide.Common.UI
     {
         private readonly float _scale;
         private string _text;
+        private Color _color = Color.White;
 
         public UICenteredText(string text, float scale)
         {
@@ -27,6 +28,11 @@ namespace SteroidGuide.Common.UI
             _text = text ?? string.Empty;
         }
 
+        public void SetColor(Color color)
+        {
+            _color = color;
+        }
+
         protected override void DrawSelf(SpriteBatch spriteBatch)
         {
             if (string.IsNullOrEmpty(_text))
@@ -38,7 +44,7 @@ namespace SteroidGuide.Common.UI
                 dimensions.X + (dimensions.Width - textSize.X) * 0.5f,
                 dimensions.Y + (dimensions.Height - textSize.Y) * 0.5f);
 
-            Utils.DrawBorderString(spriteBatch, _text, position, Color.White, _scale);
+            Utils.DrawBorderString(spriteBatch, _text, position, _color, _scale);
         }
     }
 }

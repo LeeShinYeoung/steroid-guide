@@ -1,4 +1,4 @@
-A new town NPC who lists every item you can craft right now — recipes of recipes of recipes, traced all the way to raw materials.
+A new town NPC who looks at your inventory and every chest within 60 tiles of you, and tells you exactly what you can craft right now.
 
 Works with every mod that registers recipes through tModLoader — Calamity and more.
 
@@ -6,13 +6,7 @@ Works with every mod that registers recipes through tModLoader — Calamity and 
 He arrives at your world's spawn point the moment the world is created — no boss fight, no rare drop, no condition. Build him a vacant house and he moves in.
 
 [h3]Full Crafting Path[/h3]
-The core of this mod. It lists final items that require multiple crafting steps, and clicking one unfolds the entire chain down to raw materials in a tree structure. Each material shows how many you have and how many you need, so you know exactly what to gather.
-
-[h3]Auto Scan[/h3]
-Talk to the NPC and he automatically analyzes your inventory and every chest within 60 tiles of you. No need to open chests one by one — he evaluates craftability based on everything you have. The number of chests being referenced is displayed on screen.
-
-[h3]Filter & Search[/h3]
-Filter by category — weapons, armor, accessories, tools, consumables, placeables, materials, and more. Sort by rarity or name, and search by item name to quickly find what you're looking for.
+The core of this mod. For every craftable item, click once and the entire recipe chain unfolds down to raw materials — recipes of recipes of recipes, all in a single tree. Each material shows how many you have and how many you need, so you know exactly what to gather next.
 
 [i]He answers before you ask.[/i]
 

@@ -25,8 +25,19 @@ namespace SteroidGuide.Common
         private const int MaxRequestsPerScan = 32;
         private const int ChestSyncTTLFrames = 3600; // 60s at 60fps
 
+        // Guards _syncedChestTimestamps, _requestedChests, and _chestContents.
+        // Writers can run on the network thread (MarkChestSynced, UpdateChestContentsFromMainChest);
+        // readers and most mutators run on the main thread (ScanAvailableItems, ClearSyncState, UpdateFrame).
+        private static readonly object _syncLock = new();
+
         private static readonly Dictionary<int, int> _syncedChestTimestamps = new();
         private static readonly HashSet<int> _requestedChests = new();
+
+        // Per-chest item snapshot cache keyed by chest index.
+        // Value is an aggregated type -> total stack map, which is what ScanAvailableItems needs.
+        // Survives TTL expiry so the scan keeps producing results while a refresh is in flight.
+        private static readonly Dictionary<int, Dictionary<int, int>> _chestContents = new();
+
         private static int _frameCounter;
 
         public static void UpdateFrame()
@@ -36,27 +47,60 @@ namespace SteroidGuide.Common
 
         public static void MarkChestSynced(int chestIndex)
         {
-            _syncedChestTimestamps[chestIndex] = _frameCounter;
-            _requestedChests.Remove(chestIndex);
+            lock (_syncLock)
+            {
+                _syncedChestTimestamps[chestIndex] = _frameCounter;
+                _requestedChests.Remove(chestIndex);
+            }
         }
 
-        private static bool IsChestSynced(int chestIndex)
+        // Snapshots Main.chest[chestIndex].item into the cache.
+        // Called from the network thread (packet handler) after vanilla per-slot sync has populated
+        // Main.chest[chestIndex].item, and BEFORE MarkChestSynced so readers see the new contents
+        // together with the new timestamp.
+        public static void UpdateChestContentsFromMainChest(int chestIndex)
         {
-            if (!_syncedChestTimestamps.TryGetValue(chestIndex, out int syncedAt))
-                return false;
-            if (_frameCounter - syncedAt > ChestSyncTTLFrames)
+            if (chestIndex < 0 || chestIndex >= Main.maxChests)
+                return;
+
+            var chest = Main.chest[chestIndex];
+            if (chest == null || chest.item == null)
+                return;
+
+            // Build the snapshot OUTSIDE the lock; only swap references under the lock.
+            var snapshot = new Dictionary<int, int>();
+            foreach (var item in chest.item)
             {
-                _syncedChestTimestamps.Remove(chestIndex);
-                return false;
+                if (item != null && item.type > ItemID.None && item.stack > 0)
+                {
+                    snapshot.TryGetValue(item.type, out int count);
+                    snapshot[item.type] = count + item.stack;
+                }
             }
-            return true;
+
+            lock (_syncLock)
+            {
+                _chestContents[chestIndex] = snapshot;
+            }
         }
 
         public static void ClearSyncState()
         {
-            _syncedChestTimestamps.Clear();
-            _requestedChests.Clear();
-            _frameCounter = 0;
+            lock (_syncLock)
+            {
+                _syncedChestTimestamps.Clear();
+                _requestedChests.Clear();
+                _chestContents.Clear();
+                _frameCounter = 0;
+            }
+        }
+
+        // Must be called with _syncLock held.
+        private static bool IsChestCacheFresh_NoLock(int chestIndex)
+        {
+            if (!_syncedChestTimestamps.TryGetValue(chestIndex, out int syncedAt))
+                return false;
+            return _frameCounter - syncedAt <= ChestSyncTTLFrames;
         }
 
         public static ScanResult ScanAvailableItems(Player player)
@@ -96,20 +140,73 @@ namespace SteroidGuide.Common
 
                 chestCount++;
 
-                if (isMultiplayer && !IsChestSynced(i))
+                if (isMultiplayer)
                 {
-                    if (mod != null && requestsSent < MaxRequestsPerScan && _requestedChests.Add(i))
+                    Dictionary<int, int> cachedSnapshot;
+                    bool hasCache;
+                    bool fresh;
+                    lock (_syncLock)
                     {
-                        var packet = mod.GetPacket();
-                        packet.Write((byte)MessageType.RequestChestContents);
-                        packet.Write(i);
-                        packet.Send();
-                        requestsSent++;
+                        hasCache = _chestContents.TryGetValue(i, out cachedSnapshot);
+                        fresh = hasCache && IsChestCacheFresh_NoLock(i);
+                    }
+
+                    if (!hasCache)
+                    {
+                        // First-time encounter: request and skip. No data to contribute yet.
+                        if (mod != null && requestsSent < MaxRequestsPerScan)
+                        {
+                            bool added;
+                            lock (_syncLock)
+                            {
+                                added = _requestedChests.Add(i);
+                            }
+                            if (added)
+                            {
+                                var packet = mod.GetPacket();
+                                packet.Write((byte)MessageType.RequestChestContents);
+                                packet.Write(i);
+                                packet.Send();
+                                requestsSent++;
+                            }
+                        }
+                        continue;
+                    }
+
+                    if (!fresh)
+                    {
+                        // Stale: fire a refresh in the background but keep using the cached snapshot.
+                        if (mod != null && requestsSent < MaxRequestsPerScan)
+                        {
+                            bool added;
+                            lock (_syncLock)
+                            {
+                                added = _requestedChests.Add(i);
+                            }
+                            if (added)
+                            {
+                                var packet = mod.GetPacket();
+                                packet.Write((byte)MessageType.RequestChestContents);
+                                packet.Write(i);
+                                packet.Send();
+                                requestsSent++;
+                            }
+                        }
+                    }
+
+                    syncedChestCount++;
+
+                    // Dictionary is immutable once installed (writers replace the reference under the lock),
+                    // so iterating outside the lock is safe.
+                    foreach (var kv in cachedSnapshot)
+                    {
+                        items.TryGetValue(kv.Key, out int count);
+                        items[kv.Key] = count + kv.Value;
                     }
                     continue;
                 }
 
-                // Singleplayer chests are always usable; multiplayer synced chests reach this branch.
+                // Singleplayer path: read Main.chest[i].item live. Cache is untouched.
                 syncedChestCount++;
 
                 foreach (var item in chest.item)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Terraria;
@@ -12,6 +13,36 @@ using Terraria.UI;
 
 namespace SteroidGuide.Common.UI
 {
+    /// <summary>
+    /// Per-row metadata describing which depth-wise connector verticals pass through
+    /// this row and whether it originates a branch stub into its icon. Populated by
+    /// <see cref="UIRecipeTree.SetTree"/> after the flat row list is built.
+    /// </summary>
+    public readonly struct ConnectorInfo
+    {
+        public readonly int[] ThroughDepths;   // full-height verticals for ancestor buses still open
+        public readonly int BranchDepth;       // -1 if row owns no branch (root, condition line, non-member)
+        public readonly bool IsLastAtBranch;   // true when this row terminates its parent's bus
+        public readonly bool DrawBranchStub;   // false for condition lines (through-only)
+
+        public ConnectorInfo(int[] through, int branchDepth, bool isLast, bool drawStub)
+        {
+            ThroughDepths = through;
+            BranchDepth = branchDepth;
+            IsLastAtBranch = isLast;
+            DrawBranchStub = drawStub;
+        }
+    }
+
+    /// <summary>
+    /// Marker interface implemented by every row type produced by <see cref="UIRecipeTree"/>
+    /// so the shared post-build walk can inject connector metadata uniformly.
+    /// </summary>
+    public interface IConnectorTarget
+    {
+        void SetConnectorInfo(ConnectorInfo info);
+    }
+
     public class UIRecipeTree : UIElement
     {
         private const string EmptyStateText = "Click an item above to view its recipe tree.";
@@ -22,9 +53,106 @@ namespace SteroidGuide.Common.UI
         private readonly HashSet<int> _collapsedItemIds = new();
         private static readonly Dictionary<int, int> TileDisplayItemCache = new();
 
-        private const float DepthIndent = 20f;
-        private static readonly Color LineColor = Color.Gray * 0.6f;
-        private const int LineThickness = 2;
+        // Per-frame scan lookup for ingredient rows (avoids rebuilding the tree on scan change).
+        private Func<int, int> _getHaveCount;
+
+        private const float DepthIndent = 38f;
+        private const float RowPadding = 6f;
+        private const float ArrowColumnWidth = 14f;
+        private const float IconBoxSize = 30f;
+        private const float IconInnerSize = 26f;
+        private const float NodeTextSpacing = 8f;
+        private const float IngredientExtraIndent = 32f;
+
+        // Shared connector geometry.
+        internal const float ConnectorStrokeWidth = 2f;
+        internal const float ConnectorListGapBridge = 1f; // matches `_list.ListPadding`
+        private const float TreeItemBaseRowHeight = 38f;
+
+        /// <summary>
+        /// X (screen-space) of the vertical that binds siblings rendered at <paramref name="depth"/>.
+        /// For a child rendered at depth d, this is the left edge of the child's arrow column —
+        /// one column to the left of the child's icon box.
+        /// </summary>
+        internal static int ConnectorVerticalX(float rowLeftX, int depth)
+        {
+            return SnapToPixel(rowLeftX + (depth + 1) * DepthIndent - ArrowColumnWidth);
+        }
+
+        /// <summary>
+        /// X (screen-space) of the icon box left edge at <paramref name="depth"/>. Used to
+        /// terminate the branch stub just before the icon's border.
+        /// </summary>
+        internal static int ConnectorIconLeftX(float rowLeftX, int depth)
+        {
+            return SnapToPixel(rowLeftX + (depth + 1) * DepthIndent);
+        }
+
+        /// <summary>
+        /// Draws this row's connector lines: a full-height vertical for every ancestor bus still
+        /// open (<see cref="ConnectorInfo.ThroughDepths"/>), plus the branch stub at
+        /// <see cref="ConnectorInfo.BranchDepth"/> terminating in the icon centerY. The branch
+        /// vertical's extent depends on <see cref="ConnectorInfo.IsLastAtBranch"/>:
+        /// full-height-plus-bridge for non-terminators, rowTop→centerY for terminators.
+        /// </summary>
+        internal static void DrawConnectors(SpriteBatch spriteBatch, CalculatedStyle dims, ConnectorInfo info, float iconCenterY)
+        {
+            if (info.ThroughDepths == null && info.BranchDepth < 0)
+                return;
+
+            int rowTop = SnapToPixel(dims.Y);
+            int rowHeight = SnapToPixel(dims.Y + dims.Height) - rowTop;
+            float rowLeftX = dims.X;
+
+            if (info.ThroughDepths != null)
+            {
+                for (int i = 0; i < info.ThroughDepths.Length; i++)
+                {
+                    int d = info.ThroughDepths[i];
+                    int vx = ConnectorVerticalX(rowLeftX, d);
+                    DrawConnectorVertical(spriteBatch, vx, rowTop, rowHeight + (int)ConnectorListGapBridge);
+                }
+            }
+
+            if (info.BranchDepth >= 0)
+            {
+                int vx = ConnectorVerticalX(rowLeftX, info.BranchDepth);
+
+                if (info.IsLastAtBranch)
+                {
+                    int snappedCenterY = SnapToPixel(iconCenterY);
+                    int height = Math.Max(0, snappedCenterY - rowTop);
+                    DrawConnectorVertical(spriteBatch, vx, rowTop, height);
+                }
+                else
+                {
+                    DrawConnectorVertical(spriteBatch, vx, rowTop, rowHeight + (int)ConnectorListGapBridge);
+                }
+
+                if (info.DrawBranchStub)
+                {
+                    int stubLeft = vx + (int)ConnectorStrokeWidth;
+                    int stubRight = ConnectorIconLeftX(rowLeftX, info.BranchDepth);
+                    int stubY = SnapToPixel(iconCenterY) - 1;
+                    int stubWidth = Math.Max(0, stubRight - stubLeft);
+                    if (stubWidth > 0)
+                    {
+                        spriteBatch.Draw(TextureAssets.MagicPixel.Value,
+                            new Rectangle(stubLeft, stubY, stubWidth, (int)ConnectorStrokeWidth),
+                            UIPalette.IngBlockBar);
+                    }
+                }
+            }
+        }
+
+        private static void DrawConnectorVertical(SpriteBatch spriteBatch, int x, int y, int height)
+        {
+            if (height <= 0)
+                return;
+            spriteBatch.Draw(TextureAssets.MagicPixel.Value,
+                new Rectangle(x, y, (int)ConnectorStrokeWidth, height),
+                UIPalette.IngBlockBar);
+        }
 
         public override void OnInitialize()
         {
@@ -32,6 +160,8 @@ namespace SteroidGuide.Common.UI
             bg.Width.Set(0f, 1f);
             bg.Height.Set(0f, 1f);
             bg.SetPadding(6f);
+            bg.BackgroundColor = new Color(0, 0, 0, 0); // let the recipe column backdrop show through
+            bg.BorderColor = new Color(0, 0, 0, 0);
             Append(bg);
 
             _scrollbar = new UIScrollbar();
@@ -43,7 +173,7 @@ namespace SteroidGuide.Common.UI
             _list = new UIList();
             _list.Width.Set(-28f, 1f);
             _list.Height.Set(0f, 1f);
-            _list.ListPadding = 2f;
+            _list.ListPadding = 1f;
             _list.SetScrollbar(_scrollbar);
             bg.Append(_list);
 
@@ -58,6 +188,15 @@ namespace SteroidGuide.Common.UI
         public static void ClearCaches()
         {
             TileDisplayItemCache.Clear();
+        }
+
+        /// <summary>
+        /// Sets the lookup used by ingredient rows to pull `have` counts each frame.
+        /// Lookup receives an item id and returns the available stack (0 if missing).
+        /// </summary>
+        public void SetHaveLookup(Func<int, int> getHaveCount)
+        {
+            _getHaveCount = getHaveCount;
         }
 
         public void ClearTree()
@@ -79,39 +218,99 @@ namespace SteroidGuide.Common.UI
                 return;
             }
 
-            // Root item title with icon — no tree lines
+            var entries = new List<RowEntry>();
+            var buses = new List<BusFrame>();
+            var openBusIndexStack = new List<int>(); // stack of bus frame indices currently open
+
+            // Root title row — no connector (empty info).
             var rootStations = root.UsedRecipe != null ? ResolveStations(root.UsedRecipe) : new List<StationDisplayInfo>();
-            var rootLine = new UITreeItemLine(root.ItemId, "", Color.Gold, 0.85f, -1, false, null, TriangleState.None, rootStations);
+            var rootChip = BuildStatusChip(root.Status);
+            var rootLine = new UITreeItemLine(root.ItemId, string.Empty, Color.Gold, 0.8f, -1, TriangleState.None, rootStations, rootChip);
             rootLine.Width.Set(0f, 1f);
-            rootLine.Height.Set(26f, 0f);
+            rootLine.Height.Set(TreeItemBaseRowHeight, 0f);
+            EmitRow(entries, openBusIndexStack, rootLine, branchDepth: -1);
             _list.Add(rootLine);
 
-            // Tree nodes
-            var emptyParentLines = new List<bool>();
+            // Condition line emission disabled — shimmer/transmutation conditions rendered as
+            // "Conditions: …" rows confused users into treating them as craftable recipes.
+            // if (root.UsedRecipe != null)
+            //     EmitConditionLine(entries, openBusIndexStack, root.UsedRecipe, -1);
 
-            if (root.UsedRecipe != null)
-                AddRecipeConditionLine(root.UsedRecipe, -1, emptyParentLines);
+            if (root.UsedRecipe != null || (root.Children != null && root.Children.Count > 0))
+            {
+                // Open root's child bus at depth 0. Ingredients and expandable children of the
+                // root share this bus. The bus wraps BOTH AddIngredientRows and AddChildren.
+                int rootBusIndex = OpenBus(buses, openBusIndexStack, depth: 0);
 
-            AddChildren(root, 0, emptyParentLines);
+                if (root.UsedRecipe != null)
+                    EmitIngredientRows(entries, openBusIndexStack, root, depth: 0);
+
+                EmitChildren(entries, buses, openBusIndexStack, root, parentDepth: -1);
+
+                CloseBus(buses, openBusIndexStack, rootBusIndex);
+            }
+
+            ResolveConnectorMetadata(entries, buses);
         }
 
-        private void AddChildren(RecipeTreeNode node, int depth, List<bool> parentLines)
+        /// <summary>Records a single row in the walk. Captures open-bus snapshot + branch depth.</summary>
+        private void EmitRow(List<RowEntry> entries, List<int> openBusIndexStack, IConnectorTarget row, int branchDepth)
+        {
+            // Snapshot currently-open bus indices (the stack order doesn't matter for resolve;
+            // we just need to know which buses were live at emit time).
+            int[] openSnapshot = openBusIndexStack.Count == 0
+                ? Array.Empty<int>()
+                : openBusIndexStack.ToArray();
+
+            entries.Add(new RowEntry
+            {
+                Row = row,
+                BranchDepth = branchDepth,
+                OpenBusesAtEmit = openSnapshot,
+                RowIndex = entries.Count,
+            });
+        }
+
+        private int OpenBus(List<BusFrame> buses, List<int> openBusIndexStack, int depth)
+        {
+            int index = buses.Count;
+            buses.Add(new BusFrame { Depth = depth, LastBranchRowIndex = -1 });
+            openBusIndexStack.Add(index);
+            return index;
+        }
+
+        private void CloseBus(List<BusFrame> buses, List<int> openBusIndexStack, int busIndex)
+        {
+            // Pop the bus. Buses nest perfectly so the top of stack should match `busIndex`.
+            int topIdx = openBusIndexStack.Count - 1;
+            if (topIdx >= 0 && openBusIndexStack[topIdx] == busIndex)
+                openBusIndexStack.RemoveAt(topIdx);
+        }
+
+        private void EmitChildren(List<RowEntry> entries, List<BusFrame> buses, List<int> openBusIndexStack,
+            RecipeTreeNode node, int parentDepth)
         {
             if (node.Children == null || node.Children.Count == 0)
                 return;
 
-            for (int i = 0; i < node.Children.Count; i++)
+            // Only children with their own expandable sub-recipe are rendered as tree rows.
+            // Leaf ingredients (no sub-recipe) are represented by the parent's flat ingredient
+            // rows, matching the HTML design's disjoint `children` / `ingredients` split.
+            var expandableChildren = new List<RecipeTreeNode>();
+            foreach (var child in node.Children)
             {
-                var child = node.Children[i];
-                bool isLast = i == node.Children.Count - 1;
+                if (HasDisplayableRecipeChildren(child))
+                    expandableChildren.Add(child);
+            }
 
-                string countStr = child.RequiredCount > 1 ? $" x{child.RequiredCount}" : "";
-                string statusStr = child.Status switch
-                {
-                    NodeStatus.Owned => $" [owned: {child.OwnedCount}]",
-                    NodeStatus.Craftable => " [craftable]",
-                    _ => " [missing]"
-                };
+            if (expandableChildren.Count == 0)
+                return;
+
+            int childDepth = parentDepth + 1;
+
+            foreach (var child in expandableChildren)
+            {
+                string countStr = child.RequiredCount > 1 ? $" x{child.RequiredCount}" : string.Empty;
 
                 Color color = child.Status switch
                 {
@@ -120,40 +319,214 @@ namespace SteroidGuide.Common.UI
                     _ => Color.IndianRed
                 };
 
-                bool hasRecipeDetails = HasRecipeDetails(child);
-                bool hasDisplayableChildren = HasDisplayableRecipeChildren(child);
                 bool isCollapsed = IsCollapsed(child);
+                TriangleState triangleState = isCollapsed ? TriangleState.Collapsed : TriangleState.Expanded;
 
-                string suffix = $"{countStr}{statusStr}";
-
-                TriangleState triangleState = TriangleState.None;
-                if (hasDisplayableChildren)
-                    triangleState = isCollapsed ? TriangleState.Collapsed : TriangleState.Expanded;
-
-                var stations = child.UsedRecipe != null ? ResolveStations(child.UsedRecipe) : new List<StationDisplayInfo>();
-                var line = new UITreeItemLine(child.ItemId, suffix, color, 0.7f,
-                    depth, isLast, parentLines, triangleState, stations);
+                var stations = ResolveStations(child.UsedRecipe);
+                var chip = BuildStatusChip(child, hasRecipeDetails: true);
+                var line = new UITreeItemLine(child.ItemId, countStr, color, 0.65f,
+                    childDepth, triangleState, stations, chip,
+                    _getHaveCount,
+                    child.Status == NodeStatus.Craftable);
                 line.Width.Set(0f, 1f);
-                line.Height.Set(26f, 0f);
+                line.Height.Set(TreeItemBaseRowHeight, 0f);
 
-                if (hasDisplayableChildren)
-                {
-                    var capturedChild = child;
-                    line.OnLeftClick += (evt, el) => ToggleCollapse(capturedChild.ItemId);
-                }
+                var capturedChild = child;
+                line.OnLeftClick += (evt, el) => ToggleCollapse(capturedChild.ItemId);
 
+                // Child row branches at childDepth (the parent's child-bus depth).
+                EmitRow(entries, openBusIndexStack, line, branchDepth: childDepth);
                 _list.Add(line);
 
-                // Show children if not collapsed
-                if (hasRecipeDetails && !isCollapsed)
+                if (!isCollapsed)
                 {
-                    var childParentLines = new List<bool>(parentLines) { !isLast };
+                    int grandBusIndex = OpenBus(buses, openBusIndexStack, depth: childDepth + 1);
 
-                    AddRecipeConditionLine(child.UsedRecipe, depth, childParentLines);
+                    EmitIngredientRows(entries, openBusIndexStack, child, depth: childDepth + 1);
+                    // EmitConditionLine(entries, openBusIndexStack, child.UsedRecipe, childDepth);
+                    EmitChildren(entries, buses, openBusIndexStack, child, parentDepth: childDepth);
 
-                    AddChildren(child, depth + 1, childParentLines);
+                    CloseBus(buses, openBusIndexStack, grandBusIndex);
                 }
             }
+        }
+
+        private void EmitIngredientRows(List<RowEntry> entries, List<int> openBusIndexStack,
+            RecipeTreeNode node, int depth)
+        {
+            if (node?.UsedRecipe == null)
+                return;
+
+            // Ingredients that will render as expandable tree children must NOT also appear
+            // as flat rows — the HTML design treats `children` and `ingredients` as disjoint sets.
+            var expandableChildIds = new HashSet<int>();
+            if (node.Children != null)
+            {
+                foreach (var child in node.Children)
+                {
+                    if (HasDisplayableRecipeChildren(child))
+                        expandableChildIds.Add(child.ItemId);
+                }
+            }
+
+            int batchSize = Math.Max(1, node.UsedRecipe.createItem.stack);
+            int needed = Math.Max(1, node.RequiredCount);
+            int batches = (needed + batchSize - 1) / batchSize;
+
+            // Indent matches HTML: (6 + level*18 + 32). `depth` is the depth of the block
+            // (one below its parent node), so multiply by DepthIndent then add RowPadding
+            // (to align with the parent row's contentX) + IngredientExtraIndent.
+            float leftIndent = depth * DepthIndent + RowPadding + IngredientExtraIndent;
+
+            var blockRows = new List<UIIngredientRow>();
+            foreach (var ingredient in node.UsedRecipe.requiredItem)
+            {
+                if (ingredient.type <= ItemID.None)
+                    continue;
+
+                if (expandableChildIds.Contains(ingredient.type))
+                    continue;
+
+                int ingredientNeeded = ingredient.stack * batches;
+                var row = new UIIngredientRow(ingredient.type, ingredientNeeded, _getHaveCount, leftIndent);
+                row.Width.Set(0f, 1f);
+                row.Height.Set(34f, 0f);
+                blockRows.Add(row);
+            }
+
+            for (int i = 0; i < blockRows.Count; i++)
+            {
+                // `_isLastInBlock` still drives the IngRowSeparator hairline between ingredient
+                // rows — kept independent of the new connector system.
+                blockRows[i].SetLastInBlock(i == blockRows.Count - 1);
+                // Ingredient rows branch at `depth` (they live in the parent's child-bus).
+                EmitRow(entries, openBusIndexStack, blockRows[i], branchDepth: depth);
+                _list.Add(blockRows[i]);
+            }
+        }
+
+        private void EmitConditionLine(List<RowEntry> entries, List<int> openBusIndexStack,
+            Recipe recipe, int textDepth)
+        {
+            if (recipe == null)
+                return;
+
+            if (recipe.Conditions == null || recipe.Conditions.Count == 0)
+                return;
+
+            var condNames = new List<string>();
+            foreach (var cond in recipe.Conditions)
+                condNames.Add(cond.Description.Value);
+
+            string text = $"Conditions: {string.Join(", ", condNames)}";
+            var line = new UITreeTextLine(text, new Color(180, 180, 220), 0.65f, textDepth);
+            line.Width.Set(0f, 1f);
+            line.Height.Set(20f, 0f);
+            // Condition lines carry through-verticals only (no branch, no stub).
+            EmitRow(entries, openBusIndexStack, line, branchDepth: -1);
+            _list.Add(line);
+        }
+
+        private void ResolveConnectorMetadata(List<RowEntry> entries, List<BusFrame> buses)
+        {
+            // First pass: compute `LastBranchRowIndex` per bus = largest RowIndex with
+            // BranchDepth == bus.Depth AND that bus open at emit time.
+            for (int i = 0; i < entries.Count; i++)
+            {
+                var e = entries[i];
+                if (e.BranchDepth < 0)
+                    continue;
+                for (int k = 0; k < e.OpenBusesAtEmit.Length; k++)
+                {
+                    int busIdx = e.OpenBusesAtEmit[k];
+                    if (buses[busIdx].Depth == e.BranchDepth)
+                    {
+                        var frame = buses[busIdx];
+                        if (e.RowIndex > frame.LastBranchRowIndex)
+                        {
+                            frame.LastBranchRowIndex = e.RowIndex;
+                            buses[busIdx] = frame;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // Second pass: compute per-row ConnectorInfo.
+            // A row "passes through" bus `b` iff b is open at emit AND has a later branch row
+            // (LastBranchRowIndex > this row's index) AND it is not this row's own branch bus.
+            var throughBuf = new List<int>(4);
+            for (int i = 0; i < entries.Count; i++)
+            {
+                var e = entries[i];
+                throughBuf.Clear();
+
+                int branchDepth = e.BranchDepth;
+                bool isLastAtBranch = false;
+                bool drawStub = e.Row is not UITreeTextLine;
+
+                for (int k = 0; k < e.OpenBusesAtEmit.Length; k++)
+                {
+                    int busIdx = e.OpenBusesAtEmit[k];
+                    var frame = buses[busIdx];
+
+                    if (branchDepth >= 0 && frame.Depth == branchDepth)
+                    {
+                        // This bus is the row's own branch bus — handled via BranchDepth
+                        // (we never double-include it in throughs).
+                        isLastAtBranch = (frame.LastBranchRowIndex == e.RowIndex);
+                        continue;
+                    }
+
+                    if (frame.LastBranchRowIndex > e.RowIndex)
+                        throughBuf.Add(frame.Depth);
+                }
+
+                int[] throughArr = throughBuf.Count == 0 ? Array.Empty<int>() : throughBuf.ToArray();
+                e.Row.SetConnectorInfo(new ConnectorInfo(throughArr, branchDepth, isLastAtBranch, drawStub));
+            }
+        }
+
+        private struct BusFrame
+        {
+            public int Depth;
+            public int LastBranchRowIndex; // -1 until resolved
+        }
+
+        private struct RowEntry
+        {
+            public IConnectorTarget Row;
+            public int BranchDepth;        // -1 for non-branching rows
+            public int[] OpenBusesAtEmit;  // bus-frame indices open when the row was emitted
+            public int RowIndex;           // emission order (used as tie-break key)
+        }
+
+        private static StatusChipInfo BuildStatusChip(NodeStatus status)
+        {
+            return status switch
+            {
+                // CRAFTABLE chips are intentionally suppressed in the recipe tree —
+                // the tree now communicates craftable state via node color/owned count only.
+                NodeStatus.Craftable => default,
+                NodeStatus.Owned => new StatusChipInfo(string.Empty,
+                    UIPalette.ChipOwnedBg, UIPalette.ChipOwnedBorder, UIPalette.ChipOwnedText),
+                _ => new StatusChipInfo("MISSING",
+                    UIPalette.ChipMissingBg, UIPalette.ChipMissingBorder, UIPalette.ChipMissingText),
+            };
+        }
+
+        private static StatusChipInfo BuildStatusChip(RecipeTreeNode node, bool hasRecipeDetails)
+        {
+            return node.Status switch
+            {
+                NodeStatus.Owned => new StatusChipInfo($"OWNED x{node.OwnedCount}",
+                    UIPalette.ChipOwnedBg, UIPalette.ChipOwnedBorder, UIPalette.ChipOwnedText),
+                // CRAFTABLE chips are intentionally suppressed in the recipe tree —
+                // intermediate craftable nodes surface an owned-count label on the right edge instead.
+                NodeStatus.Craftable => default,
+                _ => new StatusChipInfo("MISSING",
+                    UIPalette.ChipMissingBg, UIPalette.ChipMissingBorder, UIPalette.ChipMissingText),
+            };
         }
 
         private void ToggleCollapse(int itemId)
@@ -177,24 +550,9 @@ namespace SteroidGuide.Common.UI
 
         private bool IsCollapsed(RecipeTreeNode node)
         {
-            return HasDisplayableRecipeChildren(node) && _collapsedItemIds.Contains(node.ItemId);
-        }
-
-        private void AddRecipeConditionLine(Recipe recipe, int depth, List<bool> parentLines)
-        {
-            if (recipe == null)
-                return;
-
-            if (recipe.Conditions != null && recipe.Conditions.Count > 0)
-            {
-                var condNames = new List<string>();
-                foreach (var cond in recipe.Conditions)
-                {
-                    condNames.Add(cond.Description.Value);
-                }
-                string text = $"Conditions: {string.Join(", ", condNames)}";
-                AddTreeTextLine(text, new Color(180, 180, 220), 0.65f, depth, parentLines);
-            }
+            if (node == null || node.UsedRecipe == null)
+                return false;
+            return _collapsedItemIds.Contains(node.ItemId);
         }
 
         private static List<StationDisplayInfo> ResolveStations(Recipe recipe)
@@ -277,16 +635,6 @@ namespace SteroidGuide.Common.UI
             return false;
         }
 
-        private void AddTreeTextLine(string text, Color color, float scale, int depth, List<bool> parentLines, Action onClick = null)
-        {
-            var line = new UITreeTextLine(text, color, scale, depth, parentLines);
-            line.Width.Set(0f, 1f);
-            line.Height.Set(20f, 0f);
-            if (onClick != null)
-                line.OnLeftClick += (evt, el) => onClick();
-            _list.Add(line);
-        }
-
         private void ShowPlaceholder()
         {
             _list?.Clear();
@@ -339,6 +687,11 @@ namespace SteroidGuide.Common.UI
             public bool HasDisplayItem => ItemId > ItemID.None;
         }
 
+        private readonly record struct StatusChipInfo(string Text, Color Background, Color Border, Color TextColor)
+        {
+            public bool IsVisible => !string.IsNullOrEmpty(Text);
+        }
+
         private enum TriangleState
         {
             None,
@@ -347,24 +700,27 @@ namespace SteroidGuide.Common.UI
         }
 
         /// <summary>
-        /// Tree node line with item icon and graphic connector lines.
+        /// Tree node line rendered as: [arrow column | icon box | name | chip | station badges].
+        /// Connector lines bind siblings vertically via <see cref="ConnectorInfo"/> populated
+        /// post-build by <see cref="UIRecipeTree.SetTree"/>.
         /// </summary>
-        private class UITreeItemLine : UIElement
+        private class UITreeItemLine : UIElement, IConnectorTarget
         {
             private readonly int _itemId;
             private readonly string _suffix;
             private readonly Color _color;
             private readonly float _scale;
             private readonly int _depth;
-            private readonly bool _isLast;
-            private readonly List<bool> _parentLines;
             private readonly TriangleState _triangleState;
             private readonly List<StationDisplayInfo> _stations;
+            private readonly StatusChipInfo _statusChip;
+            private readonly Func<int, int> _haveLookup;
+            private readonly bool _showOwnedLabel;
+            private ConnectorInfo _connector;
 
             private const float TriangleSize = 8f;
-            private const float IconSize = 20f;
-            private const float BaseRowHeight = 26f;
-            private const float TextSpacing = 4f;
+            private const float ArrowCenterOffset = 5f;
+            private const float BaseRowHeight = 38f;
             private const float InlineBadgeSpacing = 8f;
             private const float BadgeSize = 24f;
             private const float BadgeSpacing = 6f;
@@ -372,25 +728,41 @@ namespace SteroidGuide.Common.UI
             private const float RightPadding = 4f;
             private const float FallbackScale = 0.58f;
             private const float MaxFallbackBadgeWidth = 140f;
+            private const float ChipHeight = 16f;
+            private const float ChipHorizontalPadding = 6f;
+            private const float ChipScale = 0.58f;
+            private const float OwnedLabelScale = 0.7f;
+            private const float OwnedLabelGap = 8f;
+            // Right inset for the owned-count label. Matches `UIIngredientRow.RightPadding`
+            // so the gray intermediate count and the leaf `have/need` text share the same
+            // vertical right edge. Kept independent of `RightPadding` (which governs
+            // station badges) so station layout is unaffected.
+            private const float OwnedLabelRightPadding = 10f;
 
-            private static readonly Color BadgeBackgroundColor = new(40, 56, 88, 210);
-            private static readonly Color BadgeBorderColor = new(124, 166, 214, 200);
-            private static readonly Color BadgeHoverColor = new(82, 112, 154, 220);
-            private static readonly Color FallbackTextColor = new(225, 235, 248);
+            private static readonly Color BadgeHoverColor = UIPalette.StationHoverBg;
 
             public UITreeItemLine(int itemId, string suffix, Color color, float scale,
-                int depth, bool isLast, List<bool> parentLines, TriangleState triangleState,
-                List<StationDisplayInfo> stations = default)
+                int depth, TriangleState triangleState,
+                List<StationDisplayInfo> stations = default,
+                StatusChipInfo chip = default,
+                Func<int, int> haveLookup = null,
+                bool showOwnedLabel = false)
             {
                 _itemId = itemId;
                 _suffix = suffix;
                 _color = color;
                 _scale = scale;
                 _depth = depth;
-                _isLast = isLast;
-                _parentLines = parentLines != null ? new List<bool>(parentLines) : null;
                 _triangleState = triangleState;
                 _stations = stations ?? new List<StationDisplayInfo>();
+                _statusChip = chip;
+                _haveLookup = haveLookup;
+                _showOwnedLabel = showOwnedLabel;
+            }
+
+            public void SetConnectorInfo(ConnectorInfo info)
+            {
+                _connector = info;
             }
 
             public override void Recalculate()
@@ -412,36 +784,77 @@ namespace SteroidGuide.Common.UI
                 float y = dims.Y;
                 float centerY = y + BaseRowHeight / 2f;
 
-                // Draw graphic tree lines
-                if (_depth >= 0)
-                    DrawTreeLines(spriteBatch, x, y, dims.Height, centerY);
+                // Connector lines render first so the icon box (drawn later) cleanly terminates the
+                // branch stub. Icon centerY must use BaseRowHeight/2f (top band), NOT dims.Height/2f,
+                // so station-badge wrap does not float the stub below the icon.
+                UIRecipeTree.DrawConnectors(spriteBatch, dims, _connector, centerY);
 
-                // Content area starts after tree connector region
                 float contentX = GetContentX(x);
                 bool rowHovered = dims.ToRectangle().Contains(Main.mouseX, Main.mouseY);
 
-                // Draw triangle toggle for collapsible nodes
-                float triangleWidth = 0f;
+                // Arrow sits in a fixed-width column at the row's left (only for collapsible rows)
                 if (_triangleState != TriangleState.None)
                 {
-                    Color triColor = rowHovered ? Color.Gold : Color.White;
-                    DrawTriangle(spriteBatch, new Vector2(contentX, centerY), _triangleState, triColor);
-                    triangleWidth = TriangleSize + 4f;
+                    Color triColor = rowHovered ? UIPalette.TreeArrowHover : UIPalette.TreeArrow;
+                    DrawTriangle(spriteBatch,
+                        new Vector2(contentX + ArrowCenterOffset, centerY),
+                        _triangleState, triColor);
                 }
 
-                // Draw item icon (20x20)
-                float iconX = contentX + triangleWidth + IconSize / 2f;
-                UIItemRenderingHelper.TryDrawItemIcon(spriteBatch, _itemId, new Vector2(iconX, centerY), IconSize);
+                // Icon box (22x22) — bg + 1px border, with the item icon drawn inside
+                float iconBoxLeft = GetIconBoxLeft(x);
+                var iconBoxRect = new Rectangle(
+                    SnapToPixel(iconBoxLeft),
+                    SnapToPixel(centerY - IconBoxSize * 0.5f),
+                    (int)IconBoxSize,
+                    (int)IconBoxSize);
+                UIDrawHelper.DrawRect(spriteBatch, iconBoxRect, UIPalette.TreeIconBg);
+                UIDrawHelper.DrawBorder(spriteBatch, iconBoxRect, UIPalette.TreeIconBorder, 1);
+                UIItemRenderingHelper.TryDrawItemIcon(spriteBatch, _itemId,
+                    new Vector2(iconBoxRect.X + IconBoxSize * 0.5f, iconBoxRect.Y + IconBoxSize * 0.5f),
+                    IconInnerSize);
 
-                // Draw item name + suffix, then inline crafting stations.
-                float textX = contentX + triangleWidth + IconSize + TextSpacing;
+                // Name + count suffix, to the right of the icon box
+                float textX = iconBoxRect.Right + NodeTextSpacing;
                 string text = GetDisplayText();
                 Vector2 textPosition = GetCenteredBorderStringPosition(text, textX, centerY, _scale);
                 Utils.DrawBorderString(spriteBatch, text, textPosition, _color, _scale);
 
+                float textWidth = FontAssets.MouseText.Value.MeasureString(text).X * _scale;
+                float chipStartX = textX + textWidth + InlineBadgeSpacing;
+
                 bool stationHovered = false;
+
+                // Status chip (MISSING/OWNED) — drawn just to the right of the text,
+                // before any station badges. CRAFTABLE is suppressed via BuildStatusChip.
+                if (_statusChip.IsVisible)
+                {
+                    Rectangle chipRect = DrawStatusChip(spriteBatch, chipStartX, centerY);
+                    chipStartX = chipRect.Right + BadgeSpacing;
+                }
+
+                // Reserve a slot on the far right for the owned-count label (intermediate craftable
+                // nodes only). Stations must stop before this slot so they cannot overlap the count.
+                // The reserved width accounts for the extra right inset used by the label so stations
+                // (which use the smaller `RightPadding`) wrap before intruding on the label column.
+                float ownedLabelWidth = GetOwnedLabelWidth(out string ownedLabel);
+                float rightReserve = ownedLabelWidth > 0f
+                    ? ownedLabelWidth + OwnedLabelGap + (OwnedLabelRightPadding - RightPadding)
+                    : 0f;
+
                 if (_stations.Count > 0)
-                    LayoutBadges(spriteBatch, x, y, dims.Width, textX, text, out stationHovered);
+                    LayoutBadges(spriteBatch, x, y, dims.Width, chipStartX, rightReserve, out stationHovered);
+
+                if (ownedLabelWidth > 0f)
+                {
+                    Vector2 ownedSize = FontAssets.MouseText.Value.MeasureString(ownedLabel) * OwnedLabelScale;
+                    // Anchor the right edge at `OwnedLabelRightPadding` so it aligns with the
+                    // leaf ingredient count's right edge (`UIIngredientRow.RightPadding = 10f`).
+                    float ownedX = dims.X + dims.Width - OwnedLabelRightPadding - ownedSize.X;
+                    float ownedY = centerY - ownedSize.Y * 0.5f;
+                    Utils.DrawBorderString(spriteBatch, ownedLabel,
+                        new Vector2(ownedX, ownedY), UIPalette.TreeOwnedCount, OwnedLabelScale);
+                }
 
                 var rect = dims.ToRectangle();
                 if (!stationHovered &&
@@ -453,30 +866,70 @@ namespace SteroidGuide.Common.UI
                 }
             }
 
+            private float GetOwnedLabelWidth(out string ownedLabel)
+            {
+                ownedLabel = string.Empty;
+
+                if (!_showOwnedLabel || _haveLookup == null)
+                    return 0f;
+
+                int owned = Math.Max(0, _haveLookup(_itemId));
+                ownedLabel = owned.ToString(CultureInfo.InvariantCulture);
+                return FontAssets.MouseText.Value.MeasureString(ownedLabel).X * OwnedLabelScale;
+            }
+
+            private Rectangle DrawStatusChip(SpriteBatch spriteBatch, float leftX, float centerY)
+            {
+                Vector2 textSize = FontAssets.MouseText.Value.MeasureString(_statusChip.Text) * ChipScale;
+                int chipWidth = (int)Math.Ceiling(textSize.X + ChipHorizontalPadding * 2f);
+                int chipTop = (int)(centerY - ChipHeight * 0.5f);
+                var chipRect = new Rectangle((int)leftX, chipTop, chipWidth, (int)ChipHeight);
+
+                UIDrawHelper.DrawRect(spriteBatch, chipRect, _statusChip.Background);
+                UIDrawHelper.DrawBorder(spriteBatch, chipRect, _statusChip.Border, 1);
+
+                Vector2 textPos = new(
+                    chipRect.X + (chipRect.Width - textSize.X) * 0.5f,
+                    chipRect.Y + (chipRect.Height - textSize.Y) * 0.5f);
+                Utils.DrawBorderString(spriteBatch, _statusChip.Text, textPos, _statusChip.TextColor, ChipScale);
+                return chipRect;
+            }
+
             private float CalculateDesiredHeight(float width)
             {
                 if (_stations.Count == 0)
                     return BaseRowHeight;
 
-                float contentX = GetContentX(0f);
-                float triangleWidth = _triangleState != TriangleState.None ? TriangleSize + 4f : 0f;
-                float textX = contentX + triangleWidth + IconSize + TextSpacing;
-                return LayoutBadges(null, 0f, 0f, width, textX, GetDisplayText(), out _);
+                float textX = GetTextOriginX(0f);
+                string text = GetDisplayText();
+                float textWidth = FontAssets.MouseText.Value.MeasureString(text).X * _scale;
+                float rowStart = textX + textWidth + InlineBadgeSpacing;
+
+                if (_statusChip.IsVisible)
+                {
+                    Vector2 chipSize = FontAssets.MouseText.Value.MeasureString(_statusChip.Text) * ChipScale;
+                    rowStart += chipSize.X + ChipHorizontalPadding * 2f + BadgeSpacing;
+                }
+
+                float ownedLabelWidth = GetOwnedLabelWidth(out _);
+                float rightReserve = ownedLabelWidth > 0f
+                    ? ownedLabelWidth + OwnedLabelGap + (OwnedLabelRightPadding - RightPadding)
+                    : 0f;
+
+                return LayoutBadges(null, 0f, 0f, width, rowStart, rightReserve, out _);
             }
 
-            private float LayoutBadges(SpriteBatch spriteBatch, float x, float y, float width, float textX, string text, out bool hoveredAny)
+            private float LayoutBadges(SpriteBatch spriteBatch, float x, float y, float width, float startX, float rightReserve, out bool hoveredAny)
             {
                 hoveredAny = false;
 
                 if (_stations.Count == 0)
                     return BaseRowHeight;
 
-                float textWidth = FontAssets.MouseText.Value.MeasureString(text).X * _scale;
-                float desiredRowStartX = textX + textWidth + InlineBadgeSpacing;
-                float wrappedRowStartX = textX;
-                float contentRight = x + width - RightPadding;
-                float currentX = desiredRowStartX;
-                float rowStartX = desiredRowStartX;
+                float wrappedRowStartX = GetTextOriginX(x);
+                float contentRight = x + width - RightPadding - rightReserve;
+                float currentX = startX;
+                float rowStartX = startX;
                 float centerY = y + BaseRowHeight * 0.5f;
                 float currentY = centerY - BadgeSize * 0.5f;
                 bool placedAnyBadge = false;
@@ -531,7 +984,21 @@ namespace SteroidGuide.Common.UI
 
             private float GetContentX(float x)
             {
-                return _depth >= 0 ? x + (_depth + 1) * DepthIndent : x;
+                // Root sits flush-left. Children step by DepthIndent per level so the
+                // root→child jump matches every subsequent parent→child jump.
+                // contentX marks the arrow column's left edge; iconLeft sits one column to the right.
+                return _depth < 0 ? x : x + (_depth + 1) * DepthIndent - ArrowColumnWidth;
+            }
+
+            private float GetIconBoxLeft(float x)
+            {
+                // Root has no arrow column; its icon sits at contentX directly.
+                return _depth < 0 ? x : x + (_depth + 1) * DepthIndent;
+            }
+
+            private float GetTextOriginX(float x)
+            {
+                return GetIconBoxLeft(x) + IconBoxSize + NodeTextSpacing;
             }
 
             private static void DrawTriangle(SpriteBatch spriteBatch, Vector2 center, TriangleState state, Color color)
@@ -571,44 +1038,6 @@ namespace SteroidGuide.Common.UI
                 }
             }
 
-            private void DrawTreeLines(SpriteBatch spriteBatch, float x, float y, float height, float centerY)
-            {
-                var pixel = TextureAssets.MagicPixel.Value;
-
-                // Continuation vertical lines for ancestors
-                if (_parentLines != null)
-                {
-                    for (int d = 0; d < _parentLines.Count; d++)
-                    {
-                        if (_parentLines[d])
-                        {
-                            float lineX = x + d * DepthIndent + DepthIndent / 2f;
-                            spriteBatch.Draw(pixel,
-                                new Rectangle((int)(lineX - LineThickness / 2f), (int)y,
-                                    LineThickness, (int)height),
-                                LineColor);
-                        }
-                    }
-                }
-
-                // Connector at current depth
-                float connX = x + _depth * DepthIndent + DepthIndent / 2f;
-
-                // Vertical part: top to center (last child, L-shape) or top to bottom
-                float vertBottom = _isLast ? centerY : y + height;
-                spriteBatch.Draw(pixel,
-                    new Rectangle((int)(connX - LineThickness / 2f), (int)y,
-                        LineThickness, (int)(vertBottom - y)),
-                    LineColor);
-
-                // Horizontal part: from connector to content area
-                float horzRight = x + (_depth + 1) * DepthIndent;
-                spriteBatch.Draw(pixel,
-                    new Rectangle((int)connX, (int)(centerY - LineThickness / 2f),
-                        (int)(horzRight - connX), LineThickness),
-                    LineColor);
-            }
-
             private static float GetBadgeWidth(StationDisplayInfo station)
             {
                 if (station.HasDisplayItem)
@@ -620,8 +1049,8 @@ namespace SteroidGuide.Common.UI
 
             private static void DrawStationBadge(SpriteBatch spriteBatch, StationDisplayInfo station, Rectangle badgeRect, bool hovered)
             {
-                UIDrawHelper.DrawRect(spriteBatch, badgeRect, hovered ? BadgeHoverColor : BadgeBackgroundColor);
-                UIDrawHelper.DrawBorder(spriteBatch, badgeRect, BadgeBorderColor, 1);
+                UIDrawHelper.DrawRect(spriteBatch, badgeRect, hovered ? BadgeHoverColor : UIPalette.StationBg);
+                UIDrawHelper.DrawBorder(spriteBatch, badgeRect, UIPalette.StationBorder, 1);
 
                 if (station.HasDisplayItem)
                 {
@@ -634,7 +1063,7 @@ namespace SteroidGuide.Common.UI
                 Vector2 textPosition = new(
                     badgeRect.X + (badgeRect.Width - textSize.X) * 0.5f,
                     badgeRect.Y + (badgeRect.Height - textSize.Y) * 0.5f);
-                Utils.DrawBorderString(spriteBatch, text, textPosition, FallbackTextColor, FallbackScale);
+                Utils.DrawBorderString(spriteBatch, text, textPosition, UIPalette.StationText, FallbackScale);
             }
 
             private static void ApplyHover(StationDisplayInfo station)
@@ -671,53 +1100,44 @@ namespace SteroidGuide.Common.UI
         }
 
         /// <summary>
-        /// Text-only tree line that draws ancestor continuation lines with pixel-based indentation.
-        /// Used for conditions.
+        /// Text-only tree line (condition/meta) aligned with the tree node name column.
+        /// Carries connector through-verticals only — never originates a branch stub.
         /// </summary>
-        private class UITreeTextLine : UIElement
+        private class UITreeTextLine : UIElement, IConnectorTarget
         {
             private readonly string _text;
             private readonly Color _color;
             private readonly float _scale;
             private readonly int _depth;
-            private readonly List<bool> _parentLines;
+            private ConnectorInfo _connector;
 
-            public UITreeTextLine(string text, Color color, float scale, int depth, List<bool> parentLines)
+            public UITreeTextLine(string text, Color color, float scale, int depth)
             {
                 _text = text;
                 _color = color;
                 _scale = scale;
                 _depth = depth;
-                _parentLines = parentLines != null ? new List<bool>(parentLines) : null;
+            }
+
+            public void SetConnectorInfo(ConnectorInfo info)
+            {
+                _connector = info;
             }
 
             protected override void DrawSelf(SpriteBatch spriteBatch)
             {
                 var dims = GetDimensions();
-                float x = dims.X;
-                float y = dims.Y;
-                float centerY = y + dims.Height / 2f;
+                float centerY = dims.Y + dims.Height / 2f;
 
-                // Draw continuation vertical lines for ancestors
-                if (_parentLines != null)
-                {
-                    var pixel = TextureAssets.MagicPixel.Value;
-                    for (int d = 0; d < _parentLines.Count; d++)
-                    {
-                        if (_parentLines[d])
-                        {
-                            float lineX = x + d * DepthIndent + DepthIndent / 2f;
-                            spriteBatch.Draw(pixel,
-                                new Rectangle((int)(lineX - LineThickness / 2f), (int)y,
-                                    LineThickness, (int)dims.Height),
-                                LineColor);
-                        }
-                    }
-                }
+                // Connector throughs only — DrawBranchStub is false on condition lines so the
+                // iconCenterY value is unused for stub geometry; pass row centerY for safety.
+                UIRecipeTree.DrawConnectors(spriteBatch, dims, _connector, centerY);
 
-                // Content starts after tree area
-                float contentX = x + (_depth + 1) * DepthIndent;
-                Vector2 textPosition = GetCenteredBorderStringPosition(_text, contentX, centerY, _scale);
+                float iconBoxLeft = _depth < 0
+                    ? dims.X
+                    : dims.X + (_depth + 1) * DepthIndent;
+                float textX = iconBoxLeft + IconBoxSize + NodeTextSpacing;
+                Vector2 textPosition = GetCenteredBorderStringPosition(_text, textX, centerY, _scale);
                 Utils.DrawBorderString(spriteBatch, _text, textPosition, _color, _scale);
             }
         }

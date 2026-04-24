@@ -15,7 +15,7 @@ namespace SteroidGuide.Common.UI
         private const int IconDotSize = 3;
         private const int IconGap = 4;
         private const float IconLeftPadding = 12f;
-        private const float LabelLeftPadding = 36f;
+        private const float LabelLeftPadding = 40f;
 
         private string _label = string.Empty;
         private bool _open;
@@ -91,5 +91,6 @@ namespace SteroidGuide.Common.UI
                 UIDrawHelper.DrawRect(spriteBatch, new Rectangle(x + IconDotSize + 2, y, widths[i], IconLineHeight), color);
             }
         }
+
     }
 }
