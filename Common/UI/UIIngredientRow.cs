@@ -15,10 +15,10 @@ namespace SteroidGuide.Common.UI
     /// </summary>
     public class UIIngredientRow : UIElement
     {
-        private const float IconSize = 30f;
-        private const float NameScale = 0.7f;
-        private const float HaveScale = 0.75f;
-        private const float NeedScale = 0.65f;
+        private const float IconSize = 26f;
+        private const float NameScale = 0.65f;
+        private const float HaveScale = 0.7f;
+        private const float NeedScale = 0.6f;
         private const float LeftPadding = 10f;
         private const float RightPadding = 10f;
         private const float IconBorderPadding = 2f;
@@ -42,7 +42,7 @@ namespace SteroidGuide.Common.UI
             _isLastInBlock = true;
 
             Width.Set(0f, 1f);
-            Height.Set(38f, 0f);
+            Height.Set(34f, 0f);
         }
 
         public void SetLastInBlock(bool isLast)

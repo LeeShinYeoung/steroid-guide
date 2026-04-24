@@ -29,8 +29,8 @@ namespace SteroidGuide.Common.UI
         private const float DepthIndent = 38f;
         private const float RowPadding = 6f;
         private const float ArrowColumnWidth = 14f;
-        private const float IconBoxSize = 34f;
-        private const float IconInnerSize = 30f;
+        private const float IconBoxSize = 30f;
+        private const float IconInnerSize = 26f;
         private const float NodeTextSpacing = 8f;
         private const float IngredientExtraIndent = 32f;
 
@@ -101,9 +101,9 @@ namespace SteroidGuide.Common.UI
             // Root item title with icon — no arrow toggle
             var rootStations = root.UsedRecipe != null ? ResolveStations(root.UsedRecipe) : new List<StationDisplayInfo>();
             var rootChip = BuildStatusChip(root.Status);
-            var rootLine = new UITreeItemLine(root.ItemId, string.Empty, Color.Gold, 0.85f, -1, TriangleState.None, rootStations, rootChip);
+            var rootLine = new UITreeItemLine(root.ItemId, string.Empty, Color.Gold, 0.8f, -1, TriangleState.None, rootStations, rootChip);
             rootLine.Width.Set(0f, 1f);
-            rootLine.Height.Set(42f, 0f);
+            rootLine.Height.Set(38f, 0f);
             _list.Add(rootLine);
 
             if (root.UsedRecipe != null)
@@ -148,12 +148,12 @@ namespace SteroidGuide.Common.UI
 
                 var stations = ResolveStations(child.UsedRecipe);
                 var chip = BuildStatusChip(child, hasRecipeDetails: true);
-                var line = new UITreeItemLine(child.ItemId, countStr, color, 0.7f,
+                var line = new UITreeItemLine(child.ItemId, countStr, color, 0.65f,
                     depth, triangleState, stations, chip,
                     _getHaveCount,
                     child.Status == NodeStatus.Craftable);
                 line.Width.Set(0f, 1f);
-                line.Height.Set(42f, 0f);
+                line.Height.Set(38f, 0f);
 
                 var capturedChild = child;
                 line.OnLeftClick += (evt, el) => ToggleCollapse(capturedChild.ItemId);
@@ -207,7 +207,7 @@ namespace SteroidGuide.Common.UI
                 int ingredientNeeded = ingredient.stack * batches;
                 var row = new UIIngredientRow(ingredient.type, ingredientNeeded, _getHaveCount, leftIndent);
                 row.Width.Set(0f, 1f);
-                row.Height.Set(38f, 0f);
+                row.Height.Set(34f, 0f);
                 blockRows.Add(row);
             }
 
@@ -462,7 +462,7 @@ namespace SteroidGuide.Common.UI
 
             private const float TriangleSize = 8f;
             private const float ArrowCenterOffset = 5f;
-            private const float BaseRowHeight = 42f;
+            private const float BaseRowHeight = 38f;
             private const float InlineBadgeSpacing = 8f;
             private const float BadgeSize = 24f;
             private const float BadgeSpacing = 6f;
