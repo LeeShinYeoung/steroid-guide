@@ -12,8 +12,11 @@ namespace SteroidGuide.Common.UI
     /// A flat-row ingredient display rendered under an expanded recipe tree node.
     /// Shows the ingredient's icon, name, and `have/need` with color coding driven
     /// by the live scan snapshot (lookup is called each frame; no rebuild on scan change).
+    /// Connector lines (the vertical bus binding siblings) are drawn by the shared
+    /// <see cref="UIRecipeTree.DrawConnectors"/> helper using metadata injected via
+    /// <see cref="SetConnectorInfo"/>.
     /// </summary>
-    public class UIIngredientRow : UIElement
+    public class UIIngredientRow : UIElement, IConnectorTarget
     {
         private const float IconSize = 26f;
         private const float NameScale = 0.65f;
@@ -24,14 +27,13 @@ namespace SteroidGuide.Common.UI
         private const float IconBorderPadding = 2f;
         private const float IconNameGap = 8f;
         private const float StockGap = 3f;
-        private const float BlockBarWidth = 2f;
-        private const float BlockTailExtension = 1f;
 
         private readonly int _ingredientId;
         private readonly int _needed;
         private readonly Func<int, int> _getHaveCount;
         private readonly float _leftIndent;
         private bool _isLastInBlock;
+        private ConnectorInfo _connector;
 
         public UIIngredientRow(int ingredientId, int needed, Func<int, int> getHaveCount, float leftIndent = 0f)
         {
@@ -48,6 +50,11 @@ namespace SteroidGuide.Common.UI
         public void SetLastInBlock(bool isLast)
         {
             _isLastInBlock = isLast;
+        }
+
+        public void SetConnectorInfo(ConnectorInfo info)
+        {
+            _connector = info;
         }
 
         protected override void DrawSelf(SpriteBatch spriteBatch)
@@ -71,13 +78,10 @@ namespace SteroidGuide.Common.UI
                     UIPalette.IngRowSeparator);
             }
 
-            // Continuous left bar matching the HTML `.ingredients-block` border-left.
-            // Extends 1px below each non-last row so the UIList `ListPadding` gap does not
-            // break the bar visually; the final row stops at its own bottom.
-            int barHeight = bounds.Height + (_isLastInBlock ? 0 : (int)BlockTailExtension);
-            UIDrawHelper.DrawRect(spriteBatch,
-                new Rectangle(bounds.X, bounds.Y, (int)BlockBarWidth, barHeight),
-                UIPalette.IngBlockBar);
+            // Connector verticals + branch stub (drawn over the row bg so they remain visible).
+            // Icon centerY = full row centerY since the ingredient icon is vertically centered.
+            UIRecipeTree.DrawConnectors(spriteBatch, dimensions, _connector,
+                dimensions.Y + dimensions.Height / 2f);
 
             // Icon box
             float iconLeft = bounds.X + LeftPadding;
