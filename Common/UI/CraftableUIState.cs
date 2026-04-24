@@ -439,7 +439,7 @@ namespace SteroidGuide.Common.UI
                 {
                     _analysisResult = task.Result;
                     RebuildItemPropsCache();
-                    ApplyFilter();
+                    ApplyFilterPreservingPage();
                 }
                 else if (task.IsFaulted && task.Exception != null)
                 {

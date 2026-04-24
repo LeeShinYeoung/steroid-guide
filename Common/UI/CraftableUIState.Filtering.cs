@@ -94,6 +94,16 @@ namespace SteroidGuide.Common.UI
 
         private void ApplyFilter()
         {
+            ApplyFilterCore(preservePage: false);
+        }
+
+        private void ApplyFilterPreservingPage()
+        {
+            ApplyFilterCore(preservePage: true);
+        }
+
+        private void ApplyFilterCore(bool preservePage)
+        {
             if (_analysisResult == null) return;
 
             string normalizedQuery = NormalizeSearchText(_searchQuery);
@@ -143,8 +153,19 @@ namespace SteroidGuide.Common.UI
                 _recipeTree?.ClearTree();
             }
 
-            _currentPage = 0;
             _totalPages = Math.Max(1, (_filteredItems.Count + ItemsPerPage - 1) / ItemsPerPage);
+
+            if (preservePage)
+            {
+                // Clamp only when the current page fell out of range due to shrinking results.
+                // If results grew, keep the user on their current page.
+                _currentPage = Math.Min(_currentPage, Math.Max(0, _totalPages - 1));
+            }
+            else
+            {
+                _currentPage = 0;
+            }
+
             string emptyStateKey = hasSearchQuery
                 ? "Mods.SteroidGuide.UI.SearchNoResults"
                 : _currentFilter == FilterCategory.All
