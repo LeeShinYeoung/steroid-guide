@@ -1,6 +1,6 @@
 A new town NPC who looks at your inventory and every chest within 60 tiles of you, and tells you exactly what you can craft right now.
 
-Works with every mod that registers recipes through tModLoader — Calamity and more.
+Works with every mod that registers recipes through tModLoader — Calamity, Magic Storage, and more.
 
 [h3]Arrival[/h3]
 He arrives at your world's spawn point the moment the world is created — no boss fight, no rare drop, no condition. Build him a vacant house and he moves in.
