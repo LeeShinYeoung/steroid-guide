@@ -219,12 +219,41 @@ namespace SteroidGuide.Common
                 }
             }
 
+            // --- Magic Storage merge (weak reference; no-op when MS is not loaded) ---
+            // Hearts within ScanRangeSq contribute their flattened unit contents.
+            // Each Heart counts as one entry in both ChestCount and SyncedChestCount —
+            // MS handles its own MP sync, so any Heart we can read is "synced" from our side.
+            int heartCount = MagicStorageBridge.MergeNearbyHeartItems(
+                playerX, playerY, ScanRangeSq, items);
+            chestCount += heartCount;
+            syncedChestCount += heartCount;
+
+            // --- Personal banks (vanilla, always-on; no chest counter bump) ---
+            // Piggy Bank, Safe, Defender's Forge, Void Vault. Items persist in these
+            // arrays even when the corresponding tile/bag is not currently in use.
+            MergePersonalBank(player.bank?.item, items);
+            MergePersonalBank(player.bank2?.item, items);
+            MergePersonalBank(player.bank3?.item, items);
+            MergePersonalBank(player.bank4?.item, items);
+
             return new ScanResult
             {
                 Items = items,
                 ChestCount = chestCount,
                 SyncedChestCount = syncedChestCount
             };
+        }
+
+        private static void MergePersonalBank(Item[] slots, Dictionary<int, int> target)
+        {
+            if (slots == null) return;
+            for (int i = 0; i < slots.Length; i++)
+            {
+                var item = slots[i];
+                if (item == null || item.type <= ItemID.None || item.stack <= 0) continue;
+                target.TryGetValue(item.type, out int count);
+                target[item.type] = count + item.stack;
+            }
         }
     }
 }

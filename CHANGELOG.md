@@ -5,6 +5,27 @@ When publishing a new version, copy the BBCode block for that release into the *
 
 ---
 
+## v1.1.1
+
+```
+[h2]v1.1.1 — Magic Storage & Personal Bank Support[/h2]
+
+[h3]New Sources[/h3]
+[list]
+[*]Magic Storage is now recognized — items inside any nearby Storage Heart count toward the craftable list, just like a regular chest
+[*]Multiple separate storage networks within range are all included (e.g. main warehouse + dedicated ore warehouse)
+[*]Piggy Bank, Safe, Defender's Forge, and Void Vault contents are now always included, regardless of where you are
+[/list]
+
+[h3]Notes[/h3]
+[list]
+[*]Magic Storage support is optional — the mod works the same as before if Magic Storage isn't installed
+[*]Each Storage Heart counts as one entry in the "nearby chests" indicator
+[/list]
+```
+
+---
+
 ## v1.1.0
 
 ```
