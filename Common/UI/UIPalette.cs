@@ -11,13 +11,13 @@ namespace SteroidGuide.Common.UI
     {
         // Window + panels
         public static readonly Color WindowBorder = new(74, 80, 144);
-        public static readonly Color PanelBg = new(28, 30, 54, 225);
-        public static readonly Color CatColumnBg = new(22, 24, 46, 217);
-        public static readonly Color GridColumnBg = new(20, 22, 44, 204);
-        public static readonly Color RecipeColumnBg = new(18, 20, 40, 209);
+        public static readonly Color PanelBg = new(28, 30, 54, 195);
+        public static readonly Color CatColumnBg = new(22, 24, 46, 160);
+        public static readonly Color GridColumnBg = new(20, 22, 44, 150);
+        public static readonly Color RecipeColumnBg = new(18, 20, 40, 155);
 
         // Titlebar
-        public static readonly Color TitleBarBg = new(42, 48, 90, 240);
+        public static readonly Color TitleBarBg = new(42, 48, 90, 210);
         public static readonly Color TitleBarAccent = new(120, 140, 220, 128);
         public static readonly Color TitleBarStatusBg = new(20, 25, 50, 178);
         public static readonly Color TitleBarStatusBorder = new(58, 64, 112);
