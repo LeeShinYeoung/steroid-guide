@@ -139,7 +139,7 @@ namespace SteroidGuide.Common.UI
                     {
                         spriteBatch.Draw(TextureAssets.MagicPixel.Value,
                             new Rectangle(stubLeft, stubY, stubWidth, (int)ConnectorStrokeWidth),
-                            UIPalette.IngBlockBar);
+                            UIPalette.TreeConnector);
                     }
                 }
             }
@@ -151,7 +151,7 @@ namespace SteroidGuide.Common.UI
                 return;
             spriteBatch.Draw(TextureAssets.MagicPixel.Value,
                 new Rectangle(x, y, (int)ConnectorStrokeWidth, height),
-                UIPalette.IngBlockBar);
+                UIPalette.TreeConnector);
         }
 
         public override void OnInitialize()
