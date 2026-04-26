@@ -78,7 +78,7 @@ namespace SteroidGuide.Common.UI
         public static readonly Color StockBad = new(192, 80, 80);
 
         // Ingredient rows
-        public static readonly Color IngRowBg = new(14, 16, 34, 128);
+        public static readonly Color IngRowBg = new(22, 26, 50, 128);
         public static readonly Color IngRowSeparator = new(30, 35, 70, 128);
         public static readonly Color IngIconBg = new(22, 25, 50, 204);
         public static readonly Color IngIconBorder = new(42, 48, 96);
