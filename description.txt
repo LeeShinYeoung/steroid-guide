@@ -1,4 +1,4 @@
-A new town NPC who looks at your inventory and every chest within 60 tiles of you, and tells you exactly what you can craft right now.
+A new town NPC who lists every item you can craft right now — recipes of recipes of recipes, traced all the way to raw materials.
 
 Works with every mod that registers recipes through tModLoader — Calamity, Magic Storage, and more.
 
@@ -6,7 +6,7 @@ Works with every mod that registers recipes through tModLoader — Calamity, Mag
 He arrives at your world's spawn point the moment the world is created — no boss fight, no rare drop, no condition. Build him a vacant house and he moves in.
 
 [h3]Full Crafting Path[/h3]
-The core of this mod. For every craftable item, click once and the entire recipe chain unfolds down to raw materials — recipes of recipes of recipes, all in a single tree. Each material shows how many you have and how many you need, so you know exactly what to gather next.
+For every craftable item, click once and the entire recipe chain unfolds down to raw materials — recipes of recipes of recipes, all in a single tree. Each material shows how many you have and how many you need, so you know exactly what to gather next.
 
 [i]He answers before you ask.[/i]
 
