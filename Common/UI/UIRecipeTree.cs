@@ -171,6 +171,11 @@ namespace SteroidGuide.Common.UI
             bg.Append(_scrollbar);
 
             _list = new UIList();
+            // UIList.Add sorts _items via List<T>.Sort on every insertion; the default
+            // UIElement.CompareTo returns 0, and List<T>.Sort is unstable past the
+            // 16-element introsort threshold, which scrambles long recipe trees.
+            // We add rows in render order so disable sorting outright.
+            _list.ManualSortMethod = _ => { };
             _list.Width.Set(-28f, 1f);
             _list.Height.Set(0f, 1f);
             _list.ListPadding = 1f;
