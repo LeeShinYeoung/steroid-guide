@@ -36,6 +36,7 @@ namespace SteroidGuide.Common.UI
         public override void Unload()
         {
             UIRecipeTree.ClearCaches();
+            UIItemRenderingHelper.ClearCaches();
             CraftableState = null;
             CraftableInterface = null;
         }

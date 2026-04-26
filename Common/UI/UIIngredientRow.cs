@@ -138,7 +138,11 @@ namespace SteroidGuide.Common.UI
             string trimmedName = TruncateToWidth(name, nameMaxWidth, NameScale);
             Vector2 nameSize = FontAssets.MouseText.Value.MeasureString(trimmedName) * NameScale;
             Vector2 namePos = new(nameLeft, rowCenterY - nameSize.Y * 0.5f);
-            Utils.DrawBorderString(spriteBatch, trimmedName, namePos, UIPalette.IngName, NameScale);
+            // Ingredient name follows item rarity for visual parity with the in-game tooltip.
+            // have/need numbers stay on stock-state colors (StockOk/Warn/Bad) — those convey
+            // possession status and are independent of rarity.
+            Color nameColor = UIItemRenderingHelper.GetItemNameColor(_ingredientId, UIPalette.IngName);
+            Utils.DrawBorderString(spriteBatch, trimmedName, namePos, nameColor, NameScale);
 
             // Hover: show tooltip for the ingredient item so players can identify modded items.
             if (bounds.Contains(Main.mouseX, Main.mouseY) &&

@@ -11,13 +11,13 @@ namespace SteroidGuide.Common.UI
     {
         // Window + panels
         public static readonly Color WindowBorder = new(74, 80, 144);
-        public static readonly Color PanelBg = new(28, 30, 54, 225);
-        public static readonly Color CatColumnBg = new(22, 24, 46, 217);
-        public static readonly Color GridColumnBg = new(20, 22, 44, 204);
-        public static readonly Color RecipeColumnBg = new(18, 20, 40, 209);
+        public static readonly Color PanelBg = new(28, 30, 54, 195);
+        public static readonly Color CatColumnBg = new(22, 24, 46, 160);
+        public static readonly Color GridColumnBg = new(20, 22, 44, 150);
+        public static readonly Color RecipeColumnBg = new(18, 20, 40, 155);
 
         // Titlebar
-        public static readonly Color TitleBarBg = new(42, 48, 90, 240);
+        public static readonly Color TitleBarBg = new(42, 48, 90, 210);
         public static readonly Color TitleBarAccent = new(120, 140, 220, 128);
         public static readonly Color TitleBarStatusBg = new(20, 25, 50, 178);
         public static readonly Color TitleBarStatusBorder = new(58, 64, 112);
@@ -59,14 +59,18 @@ namespace SteroidGuide.Common.UI
         public static readonly Color CellNameText = new(96, 112, 160);
         public static readonly Color CellNameTextSelected = new(160, 184, 232);
 
-        // Pagination
-        public static readonly Color PageBtnBg = new(30, 35, 70, 230);
-        public static readonly Color PageBtnBgHover = new(50, 60, 120, 230);
-        public static readonly Color PageBtnBorder = new(58, 64, 112);
-        public static readonly Color PageBtnBorderHover = new(80, 96, 160);
-        public static readonly Color PageBtnArrow = new(96, 112, 160);
-        public static readonly Color PageBtnArrowHover = new(160, 176, 224);
-        public static readonly Color PageText = new(80, 96, 160);
+        // Pagination (mirrors UISortButton's resting/hover palette so the
+        // pager reads as part of the same control row instead of a darker afterthought)
+        public static readonly Color PageBtnBg = new(33, 42, 73, 215);
+        public static readonly Color PageBtnBgHover = new(48, 60, 102, 222);
+        public static readonly Color PageBtnBorder = new(118, 136, 195, 185);
+        public static readonly Color PageBtnBorderHover = new(150, 167, 218, 210);
+        public static readonly Color PageBtnArrow = new(212, 220, 248);
+        public static readonly Color PageBtnArrowHover = new(236, 241, 255);
+        public static readonly Color PageBtnBgDisabled = new(24, 28, 50, 190);
+        public static readonly Color PageBtnBorderDisabled = new(58, 66, 100, 170);
+        public static readonly Color PageBtnArrowDisabled = new(92, 102, 138);
+        public static readonly Color PageText = new(220, 225, 245);
 
         // Stock indicator
         public static readonly Color StockOk = new(80, 192, 112);
@@ -74,7 +78,7 @@ namespace SteroidGuide.Common.UI
         public static readonly Color StockBad = new(192, 80, 80);
 
         // Ingredient rows
-        public static readonly Color IngRowBg = new(14, 16, 34, 128);
+        public static readonly Color IngRowBg = new(22, 26, 50, 128);
         public static readonly Color IngRowSeparator = new(30, 35, 70, 128);
         public static readonly Color IngIconBg = new(22, 25, 50, 204);
         public static readonly Color IngIconBorder = new(42, 48, 96);
@@ -107,6 +111,6 @@ namespace SteroidGuide.Common.UI
         public static readonly Color TreeArrow = new(64, 80, 160);
         public static readonly Color TreeArrowHover = new(160, 176, 224);
         public static readonly Color TreeOwnedCount = new(120, 128, 160);
-        public static readonly Color IngBlockBar = new(42, 48, 96);
+        public static readonly Color TreeConnector = new(46, 58, 120);
     }
 }

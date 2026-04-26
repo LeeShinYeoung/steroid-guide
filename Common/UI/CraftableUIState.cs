@@ -154,8 +154,8 @@ namespace SteroidGuide.Common.UI
 
             // Close button on the right
             var closeButton = new UICloseButton();
-            closeButton.Top.Set(4f, 0f);
-            closeButton.Left.Set(-34f, 1f);
+            closeButton.Top.Set(8f, 0f);
+            closeButton.Left.Set(-30f, 1f);
             closeButton.OnLeftClick += (evt, el) =>
             {
                 ModContent.GetInstance<CraftableUISystem>()?.HideUI();

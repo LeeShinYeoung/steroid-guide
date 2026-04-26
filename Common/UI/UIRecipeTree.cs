@@ -139,7 +139,7 @@ namespace SteroidGuide.Common.UI
                     {
                         spriteBatch.Draw(TextureAssets.MagicPixel.Value,
                             new Rectangle(stubLeft, stubY, stubWidth, (int)ConnectorStrokeWidth),
-                            UIPalette.IngBlockBar);
+                            UIPalette.TreeConnector);
                     }
                 }
             }
@@ -151,7 +151,7 @@ namespace SteroidGuide.Common.UI
                 return;
             spriteBatch.Draw(TextureAssets.MagicPixel.Value,
                 new Rectangle(x, y, (int)ConnectorStrokeWidth, height),
-                UIPalette.IngBlockBar);
+                UIPalette.TreeConnector);
         }
 
         public override void OnInitialize()
@@ -171,6 +171,11 @@ namespace SteroidGuide.Common.UI
             bg.Append(_scrollbar);
 
             _list = new UIList();
+            // UIList.Add sorts _items via List<T>.Sort on every insertion; the default
+            // UIElement.CompareTo returns 0, and List<T>.Sort is unstable past the
+            // 16-element introsort threshold, which scrambles long recipe trees.
+            // We add rows in render order so disable sorting outright.
+            _list.ManualSortMethod = _ => { };
             _list.Width.Set(-28f, 1f);
             _list.Height.Set(0f, 1f);
             _list.ListPadding = 1f;
@@ -225,6 +230,8 @@ namespace SteroidGuide.Common.UI
             // Root title row — no connector (empty info).
             var rootStations = root.UsedRecipe != null ? ResolveStations(root.UsedRecipe) : new List<StationDisplayInfo>();
             var rootChip = BuildStatusChip(root.Status);
+            // Color.Gold is a fallback only — UITreeItemLine.DrawSelf reads the live rarity color
+            // every frame so dynamic rarities (Master/Expert/Calamity Auric/Cosmilite) animate.
             var rootLine = new UITreeItemLine(root.ItemId, string.Empty, Color.Gold, 0.8f, -1, TriangleState.None, rootStations, rootChip);
             rootLine.Width.Set(0f, 1f);
             rootLine.Height.Set(TreeItemBaseRowHeight, 0f);
@@ -312,19 +319,18 @@ namespace SteroidGuide.Common.UI
             {
                 string countStr = child.RequiredCount > 1 ? $" x{child.RequiredCount}" : string.Empty;
 
-                Color color = child.Status switch
-                {
-                    NodeStatus.Owned => Color.LightGreen,
-                    NodeStatus.Craftable => Color.Yellow,
-                    _ => Color.IndianRed
-                };
+                // NodeStatus (Owned/Craftable/Missing) is no longer encoded in the name color —
+                // it surfaces via the right-side status chip (OWNED/MISSING) and the owned-count
+                // label. The name color is driven by item rarity at Draw time so it matches the
+                // in-game inventory/tooltip color (including dynamic shifting rarities).
+                Color fallbackColor = UIPalette.CellNameText;
 
                 bool isCollapsed = IsCollapsed(child);
                 TriangleState triangleState = isCollapsed ? TriangleState.Collapsed : TriangleState.Expanded;
 
                 var stations = ResolveStations(child.UsedRecipe);
                 var chip = BuildStatusChip(child, hasRecipeDetails: true);
-                var line = new UITreeItemLine(child.ItemId, countStr, color, 0.65f,
+                var line = new UITreeItemLine(child.ItemId, countStr, fallbackColor, 0.65f,
                     childDepth, triangleState, stations, chip,
                     _getHaveCount,
                     child.Status == NodeStatus.Craftable);
@@ -814,11 +820,14 @@ namespace SteroidGuide.Common.UI
                     new Vector2(iconBoxRect.X + IconBoxSize * 0.5f, iconBoxRect.Y + IconBoxSize * 0.5f),
                     IconInnerSize);
 
-                // Name + count suffix, to the right of the icon box
+                // Name + count suffix, to the right of the icon box.
+                // Pull rarity color every frame so dynamic rarities (Master/Expert disco shift,
+                // Calamity BurnishedAuric/Cosmilite, etc.) animate. _color is fallback only.
                 float textX = iconBoxRect.Right + NodeTextSpacing;
                 string text = GetDisplayText();
                 Vector2 textPosition = GetCenteredBorderStringPosition(text, textX, centerY, _scale);
-                Utils.DrawBorderString(spriteBatch, text, textPosition, _color, _scale);
+                Color drawColor = UIItemRenderingHelper.GetItemNameColor(_itemId, _color);
+                Utils.DrawBorderString(spriteBatch, text, textPosition, drawColor, _scale);
 
                 float textWidth = FontAssets.MouseText.Value.MeasureString(text).X * _scale;
                 float chipStartX = textX + textWidth + InlineBadgeSpacing;
