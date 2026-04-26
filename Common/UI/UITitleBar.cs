@@ -26,19 +26,10 @@ namespace SteroidGuide.Common.UI
     }
 
     /// <summary>
-    /// Small pill-style background around the nearby-chest status text in the titlebar.
-    /// Sized to its parent (1.0 width/height) — the parent slot defines the pill bounds.
+    /// Transparent slot for the nearby-chest status text in the titlebar.
+    /// Sized to its parent (1.0 width/height) — defines the text bounds without any background.
     /// </summary>
     public class UITitleBarStatusPill : UIElement
     {
-        protected override void DrawSelf(SpriteBatch spriteBatch)
-        {
-            base.DrawSelf(spriteBatch);
-
-            CalculatedStyle dimensions = GetDimensions();
-            Rectangle bounds = dimensions.ToRectangle();
-            UIDrawHelper.DrawRect(spriteBatch, bounds, UIPalette.TitleBarStatusBg);
-            UIDrawHelper.DrawBorder(spriteBatch, bounds, UIPalette.TitleBarStatusBorder, 1);
-        }
     }
 }
