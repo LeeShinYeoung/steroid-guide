@@ -9,3 +9,5 @@ Instead of checking one material at a time like the vanilla Guide, Steroid Guide
 
 [h3]Why Use It[/h3]
 This mod is meant to be used alongside the vanilla Guide, not as a replacement. While the vanilla Guide shows what a single material can be used for, Steroid Guide shows what your current resources can already turn into. This makes it easier to notice items you could already make, including ones you may not have thought of or did not know existed.
+
+[url=https://github.com/LeeShinYeoung/steroid-guide]Source Code[/url]
