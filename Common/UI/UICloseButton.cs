@@ -7,15 +7,15 @@ namespace SteroidGuide.Common.UI
 {
     public class UICloseButton : UIElement
     {
-        private static readonly int[] IconDiagonalOffsets = [0, 1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1, 0];
+        private static readonly int[] IconDiagonalOffsets = [0, 1, 2, 3, 4, 3, 2, 1, 0];
         private const int BorderThickness = 1;
         private const int InnerInset = 1;
         private const int IconStrokeWidth = 2;
 
         public UICloseButton()
         {
-            Width.Set(30f, 0f);
-            Height.Set(30f, 0f);
+            Width.Set(22f, 0f);
+            Height.Set(22f, 0f);
         }
 
         protected override void DrawSelf(SpriteBatch spriteBatch)
