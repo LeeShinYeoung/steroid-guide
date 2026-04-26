@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using ReLogic.Content;
 using Terraria;
 using Terraria.GameContent;
+using Terraria.GameContent.UI;
 using Terraria.ID;
 using Terraria.ModLoader;
 
@@ -11,6 +13,12 @@ namespace SteroidGuide.Common.UI
 {
     internal static class UIItemRenderingHelper
     {
+        // itemId → probe Item cache. Avoids repeated Item.SetDefaults (expensive) per frame
+        // for callers that read RarityColor on every Draw. Null entries are sentinels for
+        // ids that failed SetDefaults (modded items that throw, etc.) so retries are cheap.
+        // Cleared on Unload via ClearCaches() so stale references after mod reload are dropped.
+        private static readonly Dictionary<int, Item> ProbeCache = new();
+
         public static bool TryCreateDisplayItem(int itemId, out Item item)
         {
             item = new Item();
@@ -34,6 +42,70 @@ namespace SteroidGuide.Common.UI
             return TryCreateDisplayItem(itemId, out Item item)
                 ? item.Name
                 : $"Item #{itemId}";
+        }
+
+        /// <summary>
+        /// Returns the rarity color for the given item id. Modded rarities are resolved via
+        /// <see cref="RarityLoader.GetRarity(int)"/> + <see cref="ModRarity.RarityColor"/>;
+        /// vanilla rare values (incl. Master/Expert/Quest dynamic colors via DiscoColor) fall
+        /// through to <see cref="ItemRarity.GetColor(int)"/>. Animated overlays driven via
+        /// <c>ModifyTooltips</c> overrides (e.g. Calamity Auric / Cosmilite shifting) are NOT
+        /// reflected here — only static rarity color matching. Returns <paramref name="fallback"/>
+        /// when the id is invalid, the probe failed, or the modded RarityColor getter throws.
+        /// </summary>
+        public static Color GetItemNameColor(int itemId, Color fallback)
+        {
+            Item probe = GetProbe(itemId);
+            if (probe == null || probe.type <= ItemID.None)
+                return fallback;
+
+            try
+            {
+                ModRarity modRarity = RarityLoader.GetRarity(probe.rare);
+                if (modRarity != null)
+                    return modRarity.RarityColor;
+
+                return ItemRarity.GetColor(probe.rare);
+            }
+            catch
+            {
+                return fallback;
+            }
+        }
+
+        public static void ClearCaches()
+        {
+            ProbeCache.Clear();
+        }
+
+        private static Item GetProbe(int itemId)
+        {
+            if (ProbeCache.TryGetValue(itemId, out Item cached))
+                return cached;
+
+            if (!IsSafeItemId(itemId))
+            {
+                ProbeCache[itemId] = null;
+                return null;
+            }
+
+            try
+            {
+                var item = new Item();
+                item.SetDefaults(itemId);
+                if (item.type <= ItemID.None)
+                {
+                    ProbeCache[itemId] = null;
+                    return null;
+                }
+                ProbeCache[itemId] = item;
+                return item;
+            }
+            catch
+            {
+                ProbeCache[itemId] = null;
+                return null;
+            }
         }
 
         public static bool TryDrawItemIcon(SpriteBatch spriteBatch, int itemId, Vector2 center, float maxDim)

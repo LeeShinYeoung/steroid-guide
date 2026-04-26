@@ -230,7 +230,10 @@ namespace SteroidGuide.Common.UI
             }
 
             float textX = x + (maxWidth - textSize.X) / 2f;
-            Color color = isSelected ? UIPalette.CellNameTextSelected : UIPalette.CellNameText;
+            // Item name color follows in-game rarity (vanilla, modded, dynamic) so the grid
+            // matches inventory/tooltip semantics. Selection emphasis stays in the cell bg/border.
+            Color rarityColor = UIItemRenderingHelper.GetItemNameColor(itemId, UIPalette.CellNameText);
+            Color color = isSelected ? Color.Lerp(rarityColor, Color.White, 0.25f) : rarityColor;
             Utils.DrawBorderString(spriteBatch, name, new Vector2(textX, y), color, scale);
         }
 
