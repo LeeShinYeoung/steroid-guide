@@ -34,13 +34,13 @@ namespace SteroidGuide.Common.UI
             Rectangle bounds = new((int)dimensions.X, (int)dimensions.Y, (int)dimensions.Width, (int)dimensions.Height);
             Color backgroundColor = IsEnabled
                 ? (IsMouseHovering ? UIPalette.PageBtnBgHover : UIPalette.PageBtnBg)
-                : new Color(22, 24, 46, 180);
+                : UIPalette.PageBtnBgDisabled;
             Color borderColor = IsEnabled
                 ? (IsMouseHovering ? UIPalette.PageBtnBorderHover : UIPalette.PageBtnBorder)
-                : new Color(42, 46, 76);
+                : UIPalette.PageBtnBorderDisabled;
             Color arrowColor = IsEnabled
                 ? (IsMouseHovering ? UIPalette.PageBtnArrowHover : UIPalette.PageBtnArrow)
-                : new Color(64, 72, 112);
+                : UIPalette.PageBtnArrowDisabled;
 
             UIDrawHelper.DrawRect(spriteBatch, bounds, backgroundColor);
             UIDrawHelper.DrawBorder(spriteBatch, bounds, borderColor, 1);

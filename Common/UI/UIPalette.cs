@@ -59,14 +59,18 @@ namespace SteroidGuide.Common.UI
         public static readonly Color CellNameText = new(96, 112, 160);
         public static readonly Color CellNameTextSelected = new(160, 184, 232);
 
-        // Pagination
-        public static readonly Color PageBtnBg = new(30, 35, 70, 230);
-        public static readonly Color PageBtnBgHover = new(50, 60, 120, 230);
-        public static readonly Color PageBtnBorder = new(58, 64, 112);
-        public static readonly Color PageBtnBorderHover = new(80, 96, 160);
-        public static readonly Color PageBtnArrow = new(96, 112, 160);
-        public static readonly Color PageBtnArrowHover = new(160, 176, 224);
-        public static readonly Color PageText = new(80, 96, 160);
+        // Pagination (mirrors UISortButton's resting/hover palette so the
+        // pager reads as part of the same control row instead of a darker afterthought)
+        public static readonly Color PageBtnBg = new(33, 42, 73, 215);
+        public static readonly Color PageBtnBgHover = new(48, 60, 102, 222);
+        public static readonly Color PageBtnBorder = new(118, 136, 195, 185);
+        public static readonly Color PageBtnBorderHover = new(150, 167, 218, 210);
+        public static readonly Color PageBtnArrow = new(212, 220, 248);
+        public static readonly Color PageBtnArrowHover = new(236, 241, 255);
+        public static readonly Color PageBtnBgDisabled = new(24, 28, 50, 190);
+        public static readonly Color PageBtnBorderDisabled = new(58, 66, 100, 170);
+        public static readonly Color PageBtnArrowDisabled = new(92, 102, 138);
+        public static readonly Color PageText = new(220, 225, 245);
 
         // Stock indicator
         public static readonly Color StockOk = new(80, 192, 112);
