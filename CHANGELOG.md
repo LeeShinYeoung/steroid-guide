@@ -5,6 +5,34 @@ When publishing a new version, copy the BBCode block for that release into the *
 
 ---
 
+## v1.1.2
+
+```
+[h2]v1.1.2 — Rarity Colors & UI Polish[/h2]
+
+[h3]Visual[/h3]
+[list]
+[*]Item names in the craftable grid, recipe tree, and ingredient rows are now colored by rarity, matching Terraria's tooltip color scheme
+[*]Recipe tree connector lines are brighter, so parent-child structure reads more clearly at a glance
+[*]Leaf ingredient rows have a more visible row background, making the have/need column easier to scan
+[*]The craftable panel's opacity now matches the NPC chat dialog, so the two windows blend consistently when both are open
+[/list]
+
+[h3]Layout Tweaks[/h3]
+[list]
+[*]Item grid is now 5 columns with larger icons and refined name padding
+[*]Pagination buttons share the same palette as sort buttons for a more uniform header
+[*]Titlebar simplified — status pill background/border removed, close button shrunk and centered
+[/list]
+
+[h3]Bug Fixes[/h3]
+[list]
+[*]Fixed an issue where recipe tree rows would occasionally appear in scrambled order due to UIList's implicit sort
+[/list]
+```
+
+---
+
 ## v1.1.1
 
 ```
