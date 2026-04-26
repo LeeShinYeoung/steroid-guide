@@ -28,11 +28,12 @@ namespace SteroidGuide.Common.UI
         private List<int> _items = new();
         private int _selectedItemId = -1;
 
-        private const int TargetColumns = 6;
+        private const int TargetColumns = 5;
         private const int DefaultRowsPerPage = 6;
         private const float CellPadding = 2f;
-        private const float IconMaxDim = 32f;
+        private const float IconMaxDim = 38f;
         private const float NameBottomPadding = 3f;
+        private const float NameHorizontalPadding = 4f;
         private const float NameScale = 0.55f;
         private string _emptyStateText = "No craftable items found.";
 
@@ -127,7 +128,9 @@ namespace SteroidGuide.Common.UI
                 // Name label along the bottom edge
                 float nameY = cellRect.Bottom - NameBottomPadding -
                               FontAssets.MouseText.Value.MeasureString("X").Y * NameScale;
-                DrawItemName(spriteBatch, itemId, cellRect.X, nameY, cellRect.Width, isSelected);
+                DrawItemName(spriteBatch, itemId,
+                    cellRect.X + NameHorizontalPadding, nameY,
+                    cellRect.Width - NameHorizontalPadding * 2f, isSelected);
 
                 if (isHovered && UIItemRenderingHelper.TryCreateDisplayItem(itemId, out Item hoverItem))
                 {
