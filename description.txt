@@ -1,11 +1,11 @@
 A new town NPC who lists every item you can craft right now — recipes of recipes of recipes, traced all the way to raw materials.
 
-Works with every mod that registers recipes through tModLoader — Calamity, Magic Storage, and more.
-
 He appears as soon as the world is created. Build him a vacant house and he moves in.
 
+Works with every mod that registers recipes through tModLoader — Calamity, Magic Storage, and more.
+
 [h3]What He Does[/h3]
-Instead of checking one material at a time like the vanilla Guide, Steroid Guide scans your inventory and nearby chests at once to show what you can craft right now. The list shows only the top-tier items you can fully complete with your current materials, not the intermediate items along the way. Click any item to view its full crafting tree.
+Instead of checking one material at a time like the vanilla Guide, Steroid Guide scans your inventory and nearby chests within 60 tiles of your character at once to show what you can craft right now. The list shows only the top-tier items you can fully complete with your current materials, not the intermediate items along the way. Click any item to view its full crafting tree.
 
 [h3]Why Use It[/h3]
 This mod is meant to be used alongside the vanilla Guide, not as a replacement. While the vanilla Guide shows what a single material can be used for, Steroid Guide shows what your current resources can already turn into. This makes it easier to notice items you could already make, including ones you may not have thought of or did not know existed.
