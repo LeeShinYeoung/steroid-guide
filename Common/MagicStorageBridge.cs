@@ -58,6 +58,7 @@ namespace SteroidGuide.Common
         // CRITICAL: this is the ONLY method that touches MagicStorage.* types.
         // NoInlining keeps those type references out of MergeNearbyHeartItems' frame,
         // so the JIT does not try to resolve them when MS is missing.
+        [JITWhenModsEnabled("MagicStorage")]
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static int MergeNearbyHeartItems_Impl(float playerX, float playerY,
             float scanRangeSq, Dictionary<int, int> target)
