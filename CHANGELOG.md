@@ -5,6 +5,19 @@ When publishing a new version, copy the BBCode block for that release into the *
 
 ---
 
+## v1.1.3
+
+```
+[h2]v1.1.3 — Magic Storage Load Guard[/h2]
+
+[h3]Bug Fixes[/h3]
+[list]
+[*]Fixed an issue with optional Magic Storage support
+[/list]
+```
+
+---
+
 ## v1.1.2
 
 ```
