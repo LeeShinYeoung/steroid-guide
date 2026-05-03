@@ -507,33 +507,13 @@ namespace SteroidGuide.Common.UI
             public int RowIndex;           // emission order (used as tie-break key)
         }
 
-        private static StatusChipInfo BuildStatusChip(NodeStatus status)
-        {
-            return status switch
-            {
-                // CRAFTABLE chips are intentionally suppressed in the recipe tree —
-                // the tree now communicates craftable state via node color/owned count only.
-                NodeStatus.Craftable => default,
-                NodeStatus.Owned => new StatusChipInfo(string.Empty,
-                    UIPalette.ChipOwnedBg, UIPalette.ChipOwnedBorder, UIPalette.ChipOwnedText),
-                _ => new StatusChipInfo("MISSING",
-                    UIPalette.ChipMissingBg, UIPalette.ChipMissingBorder, UIPalette.ChipMissingText),
-            };
-        }
+        // All status chips (OWNED/CRAFTABLE/MISSING) are suppressed in the recipe tree.
+        // Status is communicated via the owned-count label on the right edge for intermediate
+        // craftable nodes; missing-quantity state is implicit from the displayed required count
+        // exceeding the owned count surfaced elsewhere in the row.
+        private static StatusChipInfo BuildStatusChip(NodeStatus status) => default;
 
-        private static StatusChipInfo BuildStatusChip(RecipeTreeNode node, bool hasRecipeDetails)
-        {
-            return node.Status switch
-            {
-                NodeStatus.Owned => new StatusChipInfo($"OWNED x{node.OwnedCount}",
-                    UIPalette.ChipOwnedBg, UIPalette.ChipOwnedBorder, UIPalette.ChipOwnedText),
-                // CRAFTABLE chips are intentionally suppressed in the recipe tree —
-                // intermediate craftable nodes surface an owned-count label on the right edge instead.
-                NodeStatus.Craftable => default,
-                _ => new StatusChipInfo("MISSING",
-                    UIPalette.ChipMissingBg, UIPalette.ChipMissingBorder, UIPalette.ChipMissingText),
-            };
-        }
+        private static StatusChipInfo BuildStatusChip(RecipeTreeNode node, bool hasRecipeDetails) => default;
 
         private void ToggleCollapse(int itemId)
         {
