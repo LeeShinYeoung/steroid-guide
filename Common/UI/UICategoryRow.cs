@@ -23,6 +23,11 @@ namespace SteroidGuide.Common.UI
         private const float LabelLeftPadding = 30f;
         private const float BadgeRightPadding = 10f;
 
+        // MouseText font reserves leading space above glyphs that MeasureString includes,
+        // which makes geometric centering by full measured height appear top-heavy. Shift
+        // text down by this amount to visually center the glyph caps inside the row.
+        private const float TextBaselineNudge = 2f;
+
         private readonly string _label;
         private string _badgeText = string.Empty;
         private bool _hasBadge;
@@ -101,7 +106,7 @@ namespace SteroidGuide.Common.UI
                 Vector2 badgeSize = FontAssets.MouseText.Value.MeasureString(_badgeText) * BadgeTextScale;
                 Vector2 badgePos = new(
                     badgeRight - badgeSize.X,
-                    bounds.Y + (bounds.Height - badgeSize.Y) * 0.5f);
+                    bounds.Y + (bounds.Height - badgeSize.Y) * 0.5f + TextBaselineNudge);
                 Utils.DrawBorderString(spriteBatch, _badgeText, badgePos, badgeColor, BadgeTextScale);
                 badgeRight -= badgeSize.X + 6f;
             }
@@ -114,7 +119,7 @@ namespace SteroidGuide.Common.UI
             Vector2 labelSize = FontAssets.MouseText.Value.MeasureString(labelText) * TextScale;
             Vector2 labelPos = new(
                 labelX,
-                bounds.Y + (bounds.Height - labelSize.Y) * 0.5f);
+                bounds.Y + (bounds.Height - labelSize.Y) * 0.5f + TextBaselineNudge);
             Utils.DrawBorderString(spriteBatch, labelText, labelPos, labelColor, TextScale);
         }
 
