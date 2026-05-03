@@ -554,6 +554,21 @@ namespace SteroidGuide.Common.UI
                 stations.Add(new StationDisplayInfo(tileId, tileName, itemId));
             }
 
+            // Fallback: when no station tile is required (e.g. shimmer transmutation, by-condition
+            // recipes), surface the recipe Conditions as text-only badges so the user can still tell
+            // the recipe apart from a plain by-hand recipe. Tile-bearing recipes skip this branch
+            // because their stations already convey the crafting context.
+            if (stations.Count == 0 && recipe.Conditions != null)
+            {
+                foreach (var condition in recipe.Conditions)
+                {
+                    string label = condition.Description?.Value;
+                    if (string.IsNullOrEmpty(label))
+                        continue;
+                    stations.Add(new StationDisplayInfo(-1, label, ItemID.None));
+                }
+            }
+
             return stations;
         }
 
