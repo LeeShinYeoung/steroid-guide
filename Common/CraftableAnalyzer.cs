@@ -30,6 +30,10 @@ namespace SteroidGuide.Common
         public HashSet<int> AllCraftable = new();
         public List<int> TopTierItems = new();
         public Dictionary<int, HashSet<int>> VisibleIngredients = new();
+        // Items whose ingredient *types* are all available, but quantities fall short of any recipe.
+        // PartialCraftable = relaxed_craftable \ AllCraftable.
+        public HashSet<int> PartialCraftable = new();
+        public List<int> PartialTopTierItems = new();
     }
 
     public static class CraftableAnalyzer
@@ -67,6 +71,8 @@ namespace SteroidGuide.Common
         public static AnalysisResult Analyze(RecipeGraphData graph, Dictionary<int, int> available, CancellationToken ct = default)
         {
             var result = new AnalysisResult();
+            // "no recipe" is a graph property independent of quantity, so the cache is shared
+            // across the strict and relaxed passes.
             var noRecipeCache = new HashSet<int>();
 
             var original = new DictSnapshot(available);
@@ -74,6 +80,7 @@ namespace SteroidGuide.Common
             {
                 var working = new Dictionary<int, int>(available);
 
+                // Strict pass: builds AllCraftable using exact owned counts.
                 foreach (var itemId in graph.RecipesByResult.Keys)
                 {
                     ct.ThrowIfCancellationRequested();
@@ -86,6 +93,56 @@ namespace SteroidGuide.Common
                     if (node.Status != NodeStatus.Missing)
                     {
                         result.AllCraftable.Add(itemId);
+                    }
+                }
+
+                // Relaxed pass: every owned ingredient *type* is treated as infinite supply.
+                // Skip items already known strictly-craftable (they cannot be in PartialCraftable).
+                var relaxed = new HashSet<int>();
+                foreach (var itemId in graph.RecipesByResult.Keys)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    if (result.AllCraftable.Contains(itemId)) continue;
+
+                    var visiting = new HashSet<int>();
+                    original.Restore(working);
+
+                    var node = TraverseRecipes(itemId, 1, graph, working, visiting,
+                        noRecipeCache, consumeAvailable: true, ct,
+                        ignoreOwnedForCurrentNode: true, ignoreQuantity: true);
+                    if (node.Status != NodeStatus.Missing)
+                    {
+                        relaxed.Add(itemId);
+                    }
+                }
+
+                // PartialCraftable = relaxed \ AllCraftable (already disjoint due to short-circuit).
+                foreach (var id in relaxed)
+                {
+                    result.PartialCraftable.Add(id);
+                }
+
+                // Top-tier filtering universe for partial items: AllCraftable ∪ PartialCraftable.
+                // Rationale: a partial item that is an ingredient of a *strict* craftable should still
+                // be hidden, because the user will see the strict parent in All Craftable.
+                foreach (var itemId in result.PartialCraftable)
+                {
+                    bool isIngredient = false;
+                    if (graph.ItemUsedInResults.TryGetValue(itemId, out var resultItems))
+                    {
+                        foreach (var resultItemId in resultItems)
+                        {
+                            if (result.AllCraftable.Contains(resultItemId)
+                                || result.PartialCraftable.Contains(resultItemId))
+                            {
+                                isIngredient = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!isIngredient)
+                    {
+                        result.PartialTopTierItems.Add(itemId);
                     }
                 }
             }
@@ -138,7 +195,8 @@ namespace SteroidGuide.Common
             HashSet<int> noRecipeCache,
             bool consumeAvailable,
             CancellationToken ct,
-            bool ignoreOwnedForCurrentNode = false)
+            bool ignoreOwnedForCurrentNode = false,
+            bool ignoreQuantity = false)
         {
             ct.ThrowIfCancellationRequested();
 
@@ -151,12 +209,24 @@ namespace SteroidGuide.Common
                 IgnoreOwnedForCraftability = ignoreOwnedForCurrentNode
             };
 
-            int usableOwned = ignoreOwnedForCurrentNode ? 0 : ownedCount;
+            // Three-way switch:
+            //   - Root self-exclusion (analyze a craftable as its own goal): force 0.
+            //   - Relaxed: any owned > 0 satisfies the requirement (type-only, infinite quantity).
+            //   - Strict: real owned count.
+            int usableOwned;
+            if (ignoreOwnedForCurrentNode)
+                usableOwned = 0;
+            else if (ignoreQuantity)
+                usableOwned = ownedCount > 0 ? needed : 0;
+            else
+                usableOwned = ownedCount;
 
             if (usableOwned >= needed)
             {
                 node.Status = NodeStatus.Owned;
-                if (consumeAvailable)
+                // In relaxed mode the dict represents type-presence with infinite supply, so we
+                // must not deduct: future siblings still rely on "type present" semantics.
+                if (consumeAvailable && !ignoreQuantity)
                     available[itemId] = ownedCount - needed;
                 return node;
             }
@@ -186,12 +256,15 @@ namespace SteroidGuide.Common
 
             foreach (var recipe in recipes)
             {
-                // Save state for rollback in analysis mode
-                DictSnapshot? saved = consumeAvailable ? new DictSnapshot(available) : null;
+                // Save state for rollback in analysis mode. Skip under ignoreQuantity:
+                // dict mutations are skipped in relaxed mode, so there is nothing to roll back.
+                DictSnapshot? saved = consumeAvailable && !ignoreQuantity ? new DictSnapshot(available) : null;
                 bool snapshotReturned = false;
                 try
                 {
-                    if (consumeAvailable && usableOwned > 0)
+                    // Skip the consume-zero write in relaxed mode — the dict's "type present"
+                    // semantics must remain stable across siblings.
+                    if (consumeAvailable && !ignoreQuantity && usableOwned > 0)
                         available[itemId] = 0;
 
                     int batchSize = Math.Max(1, recipe.createItem.stack);
@@ -206,7 +279,8 @@ namespace SteroidGuide.Common
                             continue;
                         int ingredientNeeded = ingredient.stack * batches;
                         var child = TraverseRecipes(ingredient.type, ingredientNeeded, graph,
-                            available, visiting, noRecipeCache, consumeAvailable, ct);
+                            available, visiting, noRecipeCache, consumeAvailable, ct,
+                            ignoreOwnedForCurrentNode: false, ignoreQuantity: ignoreQuantity);
                         children.Add(child);
                         if (child.Status == NodeStatus.Missing)
                         {
@@ -260,7 +334,8 @@ namespace SteroidGuide.Common
                             continue;
                         int ingredientNeeded = ingredient.stack * batches;
                         node.Children.Add(TraverseRecipes(ingredient.type, ingredientNeeded, graph,
-                            available, visiting, noRecipeCache, consumeAvailable, ct));
+                            available, visiting, noRecipeCache, consumeAvailable, ct,
+                            ignoreOwnedForCurrentNode: false, ignoreQuantity: ignoreQuantity));
                     }
                 }
             }

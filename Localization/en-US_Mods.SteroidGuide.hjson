@@ -42,9 +42,14 @@ UI: {
 	NearbyChestStatusSyncing: Referencing {0} nearby chests (syncing {1}/{0})
 	NearbyChestStatusAnalyzing: Referencing {0} nearby chests · analyzing...
 	SearchPlaceholder: Search craftable items...
-	SearchNoResults: No craftable items match the current query.
-	NoCraftableItems: No craftable items found.
-	NoItemsInCategory: No craftable items match the selected category.
+	SearchNoResults: No items match your search
+	NoItems: No items found
+
+	CraftabilityModes: {
+		All: All
+		Craftable: Craftable
+		Almost: Almost
+	}
 
 	Filters: {
 		All: All

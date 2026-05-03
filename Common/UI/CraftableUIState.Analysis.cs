@@ -123,6 +123,24 @@ namespace SteroidGuide.Common.UI
                 result.VisibleIngredients[topTierId] = ids;
             }
 
+            // Same display walk for partial top-tier items so search-by-ingredient and
+            // _itemPropsCache cover Almost mode too. The display tree is built strict
+            // (consumeAvailable=false, ignoreQuantity=false), exposing missing-quantity
+            // ingredients as Missing nodes — exactly what we want indexed for search.
+            foreach (int topTierId in result.PartialTopTierItems)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                visiting.Clear();
+                var tree = CraftableAnalyzer.BuildRecipeTree(
+                    topTierId, 1, graph, availableCopy, visiting,
+                    ignoreOwnedForCurrentNode: true, ct);
+
+                var ids = new HashSet<int>();
+                CollectTreeItemIds(tree, ids, ct);
+                result.VisibleIngredients[topTierId] = ids;
+            }
+
             return result;
         }
 
@@ -144,8 +162,21 @@ namespace SteroidGuide.Common.UI
             _ingredientNameCache.Clear();
             if (_analysisResult == null) return;
 
-            foreach (int itemId in _analysisResult.TopTierItems)
+            CacheItemPropsFor(_analysisResult.TopTierItems);
+            CacheItemPropsFor(_analysisResult.PartialTopTierItems);
+        }
+
+        private void CacheItemPropsFor(List<int> ids)
+        {
+            if (ids == null) return;
+
+            foreach (int itemId in ids)
             {
+                // Strict and partial top-tier sets are disjoint by construction, but guard
+                // anyway so a future refactor doesn't double-cost SetDefaults.
+                if (_itemPropsCache.ContainsKey(itemId))
+                    continue;
+
                 var item = new Item();
                 item.SetDefaults(itemId);
 

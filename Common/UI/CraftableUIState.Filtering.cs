@@ -23,6 +23,23 @@ namespace SteroidGuide.Common.UI
             }
         }
 
+        private void SetCraftabilityMode(CraftabilityMode mode)
+        {
+            if (_craftabilityMode == mode) return;
+            _craftabilityMode = mode;
+            UpdateCraftabilityModeSelectionStates();
+            // Switching axes resets pagination — use ApplyFilter (not preserve-page).
+            ApplyFilter();
+        }
+
+        private void UpdateCraftabilityModeSelectionStates()
+        {
+            foreach (var (mode, btn) in _craftabilityModeButtons)
+            {
+                btn.SetSelected(mode == _craftabilityMode);
+            }
+        }
+
         private void ToggleSortDropdown()
         {
             SetSortDropdownOpen(!_sortDropdownOpen);
@@ -75,6 +92,23 @@ namespace SteroidGuide.Common.UI
             ApplyFilter();
         }
 
+        private void CollectFilteredItems(List<int> source, string normalizedQuery, bool hasSearchQuery)
+        {
+            foreach (int itemId in source)
+            {
+                if (!_itemPropsCache.TryGetValue(itemId, out var props))
+                    continue;
+
+                if (_currentFilter != FilterCategory.All && props.Category != _currentFilter)
+                    continue;
+
+                if (hasSearchQuery && !MatchesSearchQuery(props, normalizedQuery))
+                    continue;
+
+                _filteredItems.Add(itemId);
+            }
+        }
+
         private bool MatchesSearchQuery(CachedItemProps props, string normalizedQuery)
         {
             if (props.NormalizedName.Contains(normalizedQuery, StringComparison.Ordinal))
@@ -109,20 +143,14 @@ namespace SteroidGuide.Common.UI
             string normalizedQuery = NormalizeSearchText(_searchQuery);
             bool hasSearchQuery = normalizedQuery.Length > 0;
 
+            bool includeStrict = _craftabilityMode != CraftabilityMode.Almost;
+            bool includePartial = _craftabilityMode != CraftabilityMode.Craftable;
+
             _filteredItems.Clear();
-            foreach (int itemId in _analysisResult.TopTierItems)
-            {
-                if (!_itemPropsCache.TryGetValue(itemId, out var props))
-                    continue;
-
-                if (_currentFilter != FilterCategory.All && props.Category != _currentFilter)
-                    continue;
-
-                if (hasSearchQuery && !MatchesSearchQuery(props, normalizedQuery))
-                    continue;
-
-                _filteredItems.Add(itemId);
-            }
+            if (includeStrict && _analysisResult.TopTierItems != null)
+                CollectFilteredItems(_analysisResult.TopTierItems, normalizedQuery, hasSearchQuery);
+            if (includePartial && _analysisResult.PartialTopTierItems != null)
+                CollectFilteredItems(_analysisResult.PartialTopTierItems, normalizedQuery, hasSearchQuery);
 
             // Apply sorting
             _filteredItems.Sort((a, b) =>
@@ -168,9 +196,7 @@ namespace SteroidGuide.Common.UI
 
             string emptyStateKey = hasSearchQuery
                 ? "Mods.SteroidGuide.UI.SearchNoResults"
-                : _currentFilter == FilterCategory.All
-                    ? "Mods.SteroidGuide.UI.NoCraftableItems"
-                    : "Mods.SteroidGuide.UI.NoItemsInCategory";
+                : "Mods.SteroidGuide.UI.NoItems";
             _itemGrid?.SetEmptyStateText(Language.GetTextValue(emptyStateKey));
             UpdateGrid();
             UpdatePageText();
