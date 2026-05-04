@@ -46,9 +46,8 @@ UI: {
 	NoItems: No items found
 
 	CraftabilityModes: {
-		All: All
 		Craftable: Craftable
-		Almost: Almost
+		Reachable: Reachable
 	}
 
 	Filters: {

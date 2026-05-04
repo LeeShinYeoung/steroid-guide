@@ -19,9 +19,8 @@ namespace SteroidGuide.Common.UI
 
     public enum CraftabilityMode
     {
-        All,
         Craftable,
-        Almost
+        Reachable
     }
 
     public partial class CraftableUIState : UIState
@@ -50,11 +49,15 @@ namespace SteroidGuide.Common.UI
             (FilterCategory.Misc, "Mods.SteroidGuide.UI.Filters.Misc", "Misc")
         ];
 
+        // Layout reserves 3 slots in the row but only the first two are populated.
+        // The third slot is left blank intentionally so the buttons stay narrow at 1/3 width
+        // instead of stretching to 1/2 width when the row collapses to two entries.
+        private const int CraftabilityModeRowSlotCount = 3;
+
         private static readonly (CraftabilityMode Mode, string LabelKey, string FallbackLabel)[] CraftabilityModeDefinitions =
         [
-            (CraftabilityMode.All, "Mods.SteroidGuide.UI.CraftabilityModes.All", "All"),
             (CraftabilityMode.Craftable, "Mods.SteroidGuide.UI.CraftabilityModes.Craftable", "Craftable"),
-            (CraftabilityMode.Almost, "Mods.SteroidGuide.UI.CraftabilityModes.Almost", "Almost")
+            (CraftabilityMode.Reachable, "Mods.SteroidGuide.UI.CraftabilityModes.Reachable", "Reachable")
         ];
 
         private UIPanel _mainPanel;
@@ -330,16 +333,15 @@ namespace SteroidGuide.Common.UI
             _craftabilityModeRow.Height.Set(CraftabilityModeRowHeight, 0f);
             column.Append(_craftabilityModeRow);
 
-            int modeCount = CraftabilityModeDefinitions.Length;
-            float modeWidthFraction = 1f / modeCount;
-            for (int i = 0; i < modeCount; i++)
+            float modeSlotFraction = 1f / CraftabilityModeRowSlotCount;
+            for (int i = 0; i < CraftabilityModeDefinitions.Length; i++)
             {
                 var def = CraftabilityModeDefinitions[i];
                 var modeRow = new UICategoryRow(
                     ResolveLocalizedText(def.LabelKey, def.FallbackLabel));
                 modeRow.Top.Set(0f, 0f);
-                modeRow.Left.Set(0f, i * modeWidthFraction);
-                modeRow.Width.Set(0f, modeWidthFraction);
+                modeRow.Left.Set(0f, i * modeSlotFraction);
+                modeRow.Width.Set(0f, modeSlotFraction);
                 modeRow.Height.Set(CraftabilityModeRowHeight, 0f);
                 var captured = def.Mode;
                 modeRow.OnLeftClick += (evt, el) => SetCraftabilityMode(captured);
@@ -419,26 +421,14 @@ namespace SteroidGuide.Common.UI
 
             if (_analysisResult != null)
             {
-                // Badges reflect the *current* craftability mode. All = union of both top-tier
-                // sets (which are disjoint by construction).
-                bool includeStrict = _craftabilityMode != CraftabilityMode.Almost;
-                bool includePartial = _craftabilityMode != CraftabilityMode.Craftable;
+                // Badges reflect the *current* craftability mode.
+                var sourceList = _craftabilityMode == CraftabilityMode.Reachable
+                    ? _analysisResult.ReachableTopTierItems
+                    : _analysisResult.TopTierItems;
 
-                if (includeStrict && _analysisResult.TopTierItems != null)
+                if (sourceList != null)
                 {
-                    foreach (int itemId in _analysisResult.TopTierItems)
-                    {
-                        if (!_itemPropsCache.TryGetValue(itemId, out var props))
-                            continue;
-                        int idx = (int)props.Category;
-                        if (idx >= 0 && idx < counts.Length)
-                            counts[idx]++;
-                        total++;
-                    }
-                }
-                if (includePartial && _analysisResult.PartialTopTierItems != null)
-                {
-                    foreach (int itemId in _analysisResult.PartialTopTierItems)
+                    foreach (int itemId in sourceList)
                     {
                         if (!_itemPropsCache.TryGetValue(itemId, out var props))
                             continue;

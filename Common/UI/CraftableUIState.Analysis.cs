@@ -124,10 +124,10 @@ namespace SteroidGuide.Common.UI
             }
 
             // Same display walk for partial top-tier items so search-by-ingredient and
-            // _itemPropsCache cover Almost mode too. The display tree is built strict
+            // _itemPropsCache cover Reachable mode too. The display tree is built strict
             // (consumeAvailable=false, ignoreQuantity=false), exposing missing-quantity
             // ingredients as Missing nodes — exactly what we want indexed for search.
-            foreach (int topTierId in result.PartialTopTierItems)
+            foreach (int topTierId in result.ReachableTopTierItems)
             {
                 ct.ThrowIfCancellationRequested();
 
@@ -163,7 +163,7 @@ namespace SteroidGuide.Common.UI
             if (_analysisResult == null) return;
 
             CacheItemPropsFor(_analysisResult.TopTierItems);
-            CacheItemPropsFor(_analysisResult.PartialTopTierItems);
+            CacheItemPropsFor(_analysisResult.ReachableTopTierItems);
         }
 
         private void CacheItemPropsFor(List<int> ids)

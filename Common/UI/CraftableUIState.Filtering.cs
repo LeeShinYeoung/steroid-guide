@@ -143,14 +143,13 @@ namespace SteroidGuide.Common.UI
             string normalizedQuery = NormalizeSearchText(_searchQuery);
             bool hasSearchQuery = normalizedQuery.Length > 0;
 
-            bool includeStrict = _craftabilityMode != CraftabilityMode.Almost;
-            bool includePartial = _craftabilityMode != CraftabilityMode.Craftable;
+            var sourceList = _craftabilityMode == CraftabilityMode.Reachable
+                ? _analysisResult.ReachableTopTierItems
+                : _analysisResult.TopTierItems;
 
             _filteredItems.Clear();
-            if (includeStrict && _analysisResult.TopTierItems != null)
-                CollectFilteredItems(_analysisResult.TopTierItems, normalizedQuery, hasSearchQuery);
-            if (includePartial && _analysisResult.PartialTopTierItems != null)
-                CollectFilteredItems(_analysisResult.PartialTopTierItems, normalizedQuery, hasSearchQuery);
+            if (sourceList != null)
+                CollectFilteredItems(sourceList, normalizedQuery, hasSearchQuery);
 
             // Apply sorting
             _filteredItems.Sort((a, b) =>

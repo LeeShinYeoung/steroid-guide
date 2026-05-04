@@ -31,9 +31,9 @@ namespace SteroidGuide.Common
         public List<int> TopTierItems = new();
         public Dictionary<int, HashSet<int>> VisibleIngredients = new();
         // Items whose ingredient *types* are all available, but quantities fall short of any recipe.
-        // PartialCraftable = relaxed_craftable \ AllCraftable.
-        public HashSet<int> PartialCraftable = new();
-        public List<int> PartialTopTierItems = new();
+        // ReachableCraftable = relaxed_craftable \ AllCraftable.
+        public HashSet<int> ReachableCraftable = new();
+        public List<int> ReachableTopTierItems = new();
     }
 
     public static class CraftableAnalyzer
@@ -97,7 +97,7 @@ namespace SteroidGuide.Common
                 }
 
                 // Relaxed pass: every owned ingredient *type* is treated as infinite supply.
-                // Skip items already known strictly-craftable (they cannot be in PartialCraftable).
+                // Skip items already known strictly-craftable (they cannot be in ReachableCraftable).
                 var relaxed = new HashSet<int>();
                 foreach (var itemId in graph.RecipesByResult.Keys)
                 {
@@ -116,16 +116,16 @@ namespace SteroidGuide.Common
                     }
                 }
 
-                // PartialCraftable = relaxed \ AllCraftable (already disjoint due to short-circuit).
+                // ReachableCraftable = relaxed \ AllCraftable (already disjoint due to short-circuit).
                 foreach (var id in relaxed)
                 {
-                    result.PartialCraftable.Add(id);
+                    result.ReachableCraftable.Add(id);
                 }
 
-                // Top-tier filtering universe for partial items: AllCraftable ∪ PartialCraftable.
+                // Top-tier filtering universe for partial items: AllCraftable ∪ ReachableCraftable.
                 // Rationale: a partial item that is an ingredient of a *strict* craftable should still
                 // be hidden, because the user will see the strict parent in All Craftable.
-                foreach (var itemId in result.PartialCraftable)
+                foreach (var itemId in result.ReachableCraftable)
                 {
                     bool isIngredient = false;
                     if (graph.ItemUsedInResults.TryGetValue(itemId, out var resultItems))
@@ -133,7 +133,7 @@ namespace SteroidGuide.Common
                         foreach (var resultItemId in resultItems)
                         {
                             if (result.AllCraftable.Contains(resultItemId)
-                                || result.PartialCraftable.Contains(resultItemId))
+                                || result.ReachableCraftable.Contains(resultItemId))
                             {
                                 isIngredient = true;
                                 break;
@@ -142,7 +142,7 @@ namespace SteroidGuide.Common
                     }
                     if (!isIngredient)
                     {
-                        result.PartialTopTierItems.Add(itemId);
+                        result.ReachableTopTierItems.Add(itemId);
                     }
                 }
             }
