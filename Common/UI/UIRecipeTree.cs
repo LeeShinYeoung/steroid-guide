@@ -249,10 +249,15 @@ namespace SteroidGuide.Common.UI
                 // root share this bus. The bus wraps BOTH AddIngredientRows and AddChildren.
                 int rootBusIndex = OpenBus(buses, openBusIndexStack, depth: 0);
 
-                if (root.UsedRecipe != null)
-                    EmitIngredientRows(entries, openBusIndexStack, root, depth: 0);
+                // Track item IDs along the current ancestor chain so circular sub-recipes
+                // (e.g. Plating ↔ Platform, Seeds ↔ Wall) don't emit a redundant leaf at the
+                // bottom that just repeats an ancestor with a misleading "X/0" need.
+                var ancestors = new HashSet<int> { root.ItemId };
 
-                EmitChildren(entries, buses, openBusIndexStack, root, parentDepth: -1);
+                if (root.UsedRecipe != null)
+                    EmitIngredientRows(entries, openBusIndexStack, root, depth: 0, ancestors);
+
+                EmitChildren(entries, buses, openBusIndexStack, root, parentDepth: -1, ancestors);
 
                 CloseBus(buses, openBusIndexStack, rootBusIndex);
             }
@@ -295,7 +300,7 @@ namespace SteroidGuide.Common.UI
         }
 
         private void EmitChildren(List<RowEntry> entries, List<BusFrame> buses, List<int> openBusIndexStack,
-            RecipeTreeNode node, int parentDepth)
+            RecipeTreeNode node, int parentDepth, HashSet<int> ancestors)
         {
             if (node.Children == null || node.Children.Count == 0)
                 return;
@@ -330,10 +335,14 @@ namespace SteroidGuide.Common.UI
 
                 var stations = ResolveStations(child.UsedRecipe);
                 var chip = BuildStatusChip(child, hasRecipeDetails: true);
+                // Owned-count label shows for every intermediate node regardless of status.
+                // Missing intermediates (common in Reachable mode and in any tree where a deeper
+                // ingredient is short) still benefit from surfacing the owned count so users can
+                // see how much of each intermediate they currently have.
                 var line = new UITreeItemLine(child.ItemId, countStr, fallbackColor, 0.65f,
                     childDepth, triangleState, stations, chip,
                     _getHaveCount,
-                    child.Status == NodeStatus.Craftable);
+                    showOwnedLabel: true);
                 line.Width.Set(0f, 1f);
                 line.Height.Set(TreeItemBaseRowHeight, 0f);
 
@@ -348,9 +357,11 @@ namespace SteroidGuide.Common.UI
                 {
                     int grandBusIndex = OpenBus(buses, openBusIndexStack, depth: childDepth + 1);
 
-                    EmitIngredientRows(entries, openBusIndexStack, child, depth: childDepth + 1);
+                    ancestors.Add(child.ItemId);
+                    EmitIngredientRows(entries, openBusIndexStack, child, depth: childDepth + 1, ancestors);
                     // EmitConditionLine(entries, openBusIndexStack, child.UsedRecipe, childDepth);
-                    EmitChildren(entries, buses, openBusIndexStack, child, parentDepth: childDepth);
+                    EmitChildren(entries, buses, openBusIndexStack, child, parentDepth: childDepth, ancestors);
+                    ancestors.Remove(child.ItemId);
 
                     CloseBus(buses, openBusIndexStack, grandBusIndex);
                 }
@@ -358,7 +369,7 @@ namespace SteroidGuide.Common.UI
         }
 
         private void EmitIngredientRows(List<RowEntry> entries, List<int> openBusIndexStack,
-            RecipeTreeNode node, int depth)
+            RecipeTreeNode node, int depth, HashSet<int> ancestors)
         {
             if (node?.UsedRecipe == null)
                 return;
@@ -391,6 +402,13 @@ namespace SteroidGuide.Common.UI
                     continue;
 
                 if (expandableChildIds.Contains(ingredient.type))
+                    continue;
+
+                // Skip ingredients that match an ancestor in the current chain. These would
+                // otherwise emit a confusing leaf with a "/0" need (a side-effect of the
+                // analyzer's cycle-detection fallback) and add no information beyond what
+                // the ancestor row already conveys.
+                if (ancestors.Contains(ingredient.type))
                     continue;
 
                 int ingredientNeeded = ingredient.stack * batches;
