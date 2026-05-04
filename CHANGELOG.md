@@ -5,6 +5,20 @@ When publishing a new version, copy the BBCode block for that release into the *
 
 ---
 
+## v1.1.5
+
+```
+[h2]v1.1.5 — Smaller Mod Package[/h2]
+
+[h3]Packaging[/h3]
+[list]
+[*]Mod download size reduced by ~94% (1.3MB → ~77KB) by excluding development-only files (README screenshots, compile-time references, internal workspace artifacts) from the packaged .tmod
+[*]No gameplay or runtime change — only the file shipped through the Workshop is leaner
+[/list]
+```
+
+---
+
 ## v1.1.4
 
 ```
