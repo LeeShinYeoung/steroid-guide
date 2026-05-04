@@ -136,7 +136,7 @@ namespace SteroidGuide.Common.UI
 
         public override void OnInitialize()
         {
-            _mainPanel = new UIPanel();
+            _mainPanel = new UIRectPanel();
             _mainPanel.Width.Set(MainPanelWidth, 0f);
             _mainPanel.Height.Set(MainPanelHeight, 0f);
             _mainPanel.HAlign = 0.5f;
