@@ -5,6 +5,32 @@ When publishing a new version, copy the BBCode block for that release into the *
 
 ---
 
+## v1.1.4
+
+```
+[h2]v1.1.4 — Reachable Mode & Recipe Tree Polish[/h2]
+
+[h3]New Feature[/h3]
+[list]
+[*]New [b]Reachable[/b] mode — filter items where you have at least one of every ingredient type but the quantity is short. Toggle between [i]Craftable[/i] (you can craft it right now) and [i]Reachable[/i] from the buttons above the item grid.
+[/list]
+
+[h3]Recipe Tree[/h3]
+[list]
+[*]Owned/Craftable/Missing status chips have been hidden — the recipe tree now reads as a clean structure, with the per-material owned count shown on every intermediate node (not just craftable ones)
+[*]Recipes with no required station (e.g. Shimmer transmutations) now show their condition as a label on the right (e.g. [i]Near Shimmer[/i])
+[*]Cyclic ingredient rows are now skipped — no more confusing "X/0" leaves caused by self-referential recipes like Plating ↔ Platform
+[*]Fixed vertical text alignment in category and filter rows so labels sit centered in their slots
+[/list]
+
+[h3]UI Polish[/h3]
+[list]
+[*]The main window now uses sharp, flat corners to match the inner column backdrops — no more mixed rounded/flat chrome
+[/list]
+```
+
+---
+
 ## v1.1.3
 
 ```
