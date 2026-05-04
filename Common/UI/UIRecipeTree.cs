@@ -747,6 +747,9 @@ namespace SteroidGuide.Common.UI
             private const float RightPadding = 4f;
             private const float FallbackScale = 0.58f;
             private const float MaxFallbackBadgeWidth = 140f;
+            // MouseText.MeasureString includes leading, which renders text top-heavy when
+            // centered with (height - textHeight) * 0.5f. Same compensation as UICategoryRow.
+            private const float FallbackTextBaselineNudge = 2f;
             private const float ChipHeight = 16f;
             private const float ChipHorizontalPadding = 6f;
             private const float ChipScale = 0.58f;
@@ -1084,7 +1087,7 @@ namespace SteroidGuide.Common.UI
                 Vector2 textSize = FontAssets.MouseText.Value.MeasureString(text) * FallbackScale;
                 Vector2 textPosition = new(
                     badgeRect.X + (badgeRect.Width - textSize.X) * 0.5f,
-                    badgeRect.Y + (badgeRect.Height - textSize.Y) * 0.5f);
+                    badgeRect.Y + (badgeRect.Height - textSize.Y) * 0.5f + FallbackTextBaselineNudge);
                 Utils.DrawBorderString(spriteBatch, text, textPosition, UIPalette.StationText, FallbackScale);
             }
 
