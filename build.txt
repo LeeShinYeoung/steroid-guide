@@ -1,4 +1,4 @@
 displayName = Steroid Guide
 author = ShinYeoung Lee
-version = 1.1.2
+version = 1.1.4
 weakReferences = MagicStorage@0.7

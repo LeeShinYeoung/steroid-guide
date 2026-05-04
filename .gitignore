@@ -3,3 +3,4 @@ obj/
 .omc/
 settings.json
 _workspace*
+.claude/*.lock

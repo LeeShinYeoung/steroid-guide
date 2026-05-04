@@ -17,6 +17,12 @@ namespace SteroidGuide.Common.UI
         Name
     }
 
+    public enum CraftabilityMode
+    {
+        Craftable,
+        Reachable
+    }
+
     public partial class CraftableUIState : UIState
     {
         private const string NearbyChestStatusSingularKey = "Mods.SteroidGuide.UI.NearbyChestStatusSingular";
@@ -43,6 +49,17 @@ namespace SteroidGuide.Common.UI
             (FilterCategory.Misc, "Mods.SteroidGuide.UI.Filters.Misc", "Misc")
         ];
 
+        // Layout reserves 3 slots in the row but only the first two are populated.
+        // The third slot is left blank intentionally so the buttons stay narrow at 1/3 width
+        // instead of stretching to 1/2 width when the row collapses to two entries.
+        private const int CraftabilityModeRowSlotCount = 3;
+
+        private static readonly (CraftabilityMode Mode, string LabelKey, string FallbackLabel)[] CraftabilityModeDefinitions =
+        [
+            (CraftabilityMode.Craftable, "Mods.SteroidGuide.UI.CraftabilityModes.Craftable", "Craftable"),
+            (CraftabilityMode.Reachable, "Mods.SteroidGuide.UI.CraftabilityModes.Reachable", "Reachable")
+        ];
+
         private UIPanel _mainPanel;
         private UITitleBar _titleBar;
         private UIText _nearbyChestStatusText;
@@ -51,6 +68,11 @@ namespace SteroidGuide.Common.UI
         // Filter
         private FilterCategory _currentFilter = FilterCategory.All;
         private readonly Dictionary<FilterCategory, UICategoryRow> _filterButtons = new();
+
+        // Craftability mode (orthogonal to FilterCategory)
+        private CraftabilityMode _craftabilityMode = CraftabilityMode.Craftable;
+        private readonly Dictionary<CraftabilityMode, UICategoryRow> _craftabilityModeButtons = new();
+        private UIElement _craftabilityModeRow;
 
         // Sort
         private SortCriteria _currentSort = SortCriteria.Rarity;
@@ -106,13 +128,15 @@ namespace SteroidGuide.Common.UI
         private const float CategorySectionTop = 8f;
         private const float CategoryFooterHeight = 34f;
         private const float CategoryFooterPadding = 6f;
+        private const float CraftabilityModeRowHeight = 26f;
+        private const float CraftabilityModeRowGap = 4f;
 
         public bool IsSearchFocused => _searchTextBox?.IsFocused ?? false;
         public bool IsMouseOverMainPanel => _mainPanel?.ContainsPoint(Main.MouseScreen) ?? false;
 
         public override void OnInitialize()
         {
-            _mainPanel = new UIPanel();
+            _mainPanel = new UIRectPanel();
             _mainPanel.Width.Set(MainPanelWidth, 0f);
             _mainPanel.Height.Set(MainPanelHeight, 0f);
             _mainPanel.HAlign = 0.5f;
@@ -286,7 +310,8 @@ namespace SteroidGuide.Common.UI
             column.Append(bg);
 
             float searchTop = ColumnInnerPadding;
-            float gridTop = searchTop + SearchBoxHeight + ColumnInnerPadding;
+            float modeRowTop = searchTop + SearchBoxHeight + ColumnInnerPadding;
+            float gridTop = modeRowTop + CraftabilityModeRowHeight + CraftabilityModeRowGap;
             float paginationTop = (MainPanelHeight - TitleBarHeight) - PaginationHeight - ColumnInnerPadding;
             float gridHeight = paginationTop - gridTop - ColumnInnerPadding;
 
@@ -298,6 +323,32 @@ namespace SteroidGuide.Common.UI
             _searchTextBox.Height.Set(SearchBoxHeight, 0f);
             _searchTextBox.OnTextChanged += OnSearchTextChanged;
             column.Append(_searchTextBox);
+
+            // Craftability mode row: two pill-style buttons split 50/50, reusing UICategoryRow
+            // to keep the visual language consistent with the sidebar.
+            _craftabilityModeRow = new UIElement();
+            _craftabilityModeRow.Top.Set(modeRowTop, 0f);
+            _craftabilityModeRow.Left.Set(ColumnInnerPadding, 0f);
+            _craftabilityModeRow.Width.Set(-ColumnInnerPadding * 2f, 1f);
+            _craftabilityModeRow.Height.Set(CraftabilityModeRowHeight, 0f);
+            column.Append(_craftabilityModeRow);
+
+            float modeSlotFraction = 1f / CraftabilityModeRowSlotCount;
+            for (int i = 0; i < CraftabilityModeDefinitions.Length; i++)
+            {
+                var def = CraftabilityModeDefinitions[i];
+                var modeRow = new UICategoryRow(
+                    ResolveLocalizedText(def.LabelKey, def.FallbackLabel));
+                modeRow.Top.Set(0f, 0f);
+                modeRow.Left.Set(0f, i * modeSlotFraction);
+                modeRow.Width.Set(0f, modeSlotFraction);
+                modeRow.Height.Set(CraftabilityModeRowHeight, 0f);
+                var captured = def.Mode;
+                modeRow.OnLeftClick += (evt, el) => SetCraftabilityMode(captured);
+                modeRow.SetSelected(def.Mode == _craftabilityMode);
+                _craftabilityModeRow.Append(modeRow);
+                _craftabilityModeButtons[def.Mode] = modeRow;
+            }
 
             _itemGrid = new UIItemGrid();
             _itemGrid.Top.Set(gridTop, 0f);
@@ -370,14 +421,22 @@ namespace SteroidGuide.Common.UI
 
             if (_analysisResult != null)
             {
-                foreach (int itemId in _analysisResult.TopTierItems)
+                // Badges reflect the *current* craftability mode.
+                var sourceList = _craftabilityMode == CraftabilityMode.Reachable
+                    ? _analysisResult.ReachableTopTierItems
+                    : _analysisResult.TopTierItems;
+
+                if (sourceList != null)
                 {
-                    if (!_itemPropsCache.TryGetValue(itemId, out var props))
-                        continue;
-                    int idx = (int)props.Category;
-                    if (idx >= 0 && idx < counts.Length)
-                        counts[idx]++;
-                    total++;
+                    foreach (int itemId in sourceList)
+                    {
+                        if (!_itemPropsCache.TryGetValue(itemId, out var props))
+                            continue;
+                        int idx = (int)props.Category;
+                        if (idx >= 0 && idx < counts.Length)
+                            counts[idx]++;
+                        total++;
+                    }
                 }
             }
 
@@ -404,12 +463,14 @@ namespace SteroidGuide.Common.UI
             _selectedItemId = -1;
             _currentPage = 0;
             _currentFilter = FilterCategory.All;
+            _craftabilityMode = CraftabilityMode.Craftable;
             _searchQuery = string.Empty;
             SetSortDropdownOpen(false);
             _sortButton?.SetState(GetSortLabel(_currentSort), _sortDropdownOpen);
             _searchTextBox?.Reset();
             _recipeTree?.ClearTree();
             UpdateFilterSelectionStates();
+            UpdateCraftabilityModeSelectionStates();
             _lastStatusText = null;
             RunAnalysis();
         }
