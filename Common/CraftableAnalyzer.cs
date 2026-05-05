@@ -1,9 +1,11 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using Terraria;
 using Terraria.ID;
+using Terraria.ModLoader;
 
 namespace SteroidGuide.Common
 {
@@ -84,12 +86,17 @@ namespace SteroidGuide.Common
             // across the strict and relaxed passes.
             var noRecipeCache = new HashSet<int>();
 
+            // Phase timers for [Perf-Analyze] breakdown. Local Stopwatch — never persisted.
+            long strictMs = 0, relaxedMs = 0, topTierMs = 0;
+            var phaseSw = new Stopwatch();
+
             var original = new DictSnapshot(available);
             try
             {
                 var working = new Dictionary<int, int>(available);
 
                 // Strict pass: builds AllCraftable using exact owned counts.
+                phaseSw.Restart();
                 foreach (var itemId in graph.RecipesByResult.Keys)
                 {
                     ct.ThrowIfCancellationRequested();
@@ -99,13 +106,32 @@ namespace SteroidGuide.Common
 
                     var node = TraverseRecipes(itemId, 1, graph, working, visiting,
                         noRecipeCache, consumeAvailable: true, ct, depth: 0,
+                        out _,
                         ignoreOwnedForCurrentNode: true);
                     if (node.Status != NodeStatus.Missing)
                         result.AllCraftable.Add(itemId);
                 }
+                strictMs = phaseSw.ElapsedMilliseconds;
 
                 // Relaxed pass: every owned ingredient *type* is treated as infinite supply.
                 // Skip items already known strictly-craftable (they cannot be in ReachableCraftable).
+                //
+                // Relaxed memoization (Tier 1): the relaxed pass never mutates `working` (line 242
+                // gate on `!ignoreQuantity` and line 295 likewise). With `working` restored to
+                // `original` before each top-level call AND no in-call mutation, the function
+                // becomes a pure mapping (itemId, ignoreOwnedForCurrentNode) → craftable-or-not
+                // *for this Analyze invocation*. We therefore memoize relaxed results in two
+                // dictionaries — one for root entries (ignoreOwnedForCurrentNode=true, owned
+                // self-supply forced to 0) and one for recursive child entries (false).
+                //
+                // Caches are scoped to this method — they are GC'd when Analyze returns. Strict
+                // pass passes null (caching strict results would be unsound: strict pass DOES
+                // mutate `working` mid-recursion). Cycle-hit (visiting) results are NEVER stored
+                // because they depend on the live ancestor set, not the item alone.
+                var relaxedCacheRoot = new Dictionary<int, bool>();
+                var relaxedCacheChild = new Dictionary<int, bool>();
+
+                phaseSw.Restart();
                 var relaxed = new HashSet<int>();
                 foreach (var itemId in graph.RecipesByResult.Keys)
                 {
@@ -117,10 +143,14 @@ namespace SteroidGuide.Common
 
                     var node = TraverseRecipes(itemId, 1, graph, working, visiting,
                         noRecipeCache, consumeAvailable: true, ct, depth: 0,
-                        ignoreOwnedForCurrentNode: true, ignoreQuantity: true);
+                        out _,
+                        ignoreOwnedForCurrentNode: true, ignoreQuantity: true,
+                        relaxedCacheRoot: relaxedCacheRoot,
+                        relaxedCacheChild: relaxedCacheChild);
                     if (node.Status != NodeStatus.Missing)
                         relaxed.Add(itemId);
                 }
+                relaxedMs = phaseSw.ElapsedMilliseconds;
 
                 // ReachableCraftable = relaxed \ AllCraftable (already disjoint due to short-circuit).
                 foreach (var id in relaxed)
@@ -131,6 +161,7 @@ namespace SteroidGuide.Common
                 // Top-tier filtering universe for partial items: AllCraftable ∪ ReachableCraftable.
                 // Rationale: a partial item that is an ingredient of a *strict* craftable should still
                 // be hidden, because the user will see the strict parent in All Craftable.
+                phaseSw.Restart();
                 foreach (var itemId in result.ReachableCraftable)
                 {
                     bool isIngredient = false;
@@ -151,31 +182,35 @@ namespace SteroidGuide.Common
                         result.ReachableTopTierItems.Add(itemId);
                     }
                 }
+
+                // Filter to top-tier: craftable items not used as ingredient for another craftable item.
+                foreach (var itemId in result.AllCraftable)
+                {
+                    bool isIngredient = false;
+                    if (graph.ItemUsedInResults.TryGetValue(itemId, out var resultItems))
+                    {
+                        foreach (var resultItemId in resultItems)
+                        {
+                            if (result.AllCraftable.Contains(resultItemId))
+                            {
+                                isIngredient = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!isIngredient)
+                    {
+                        result.TopTierItems.Add(itemId);
+                    }
+                }
+                topTierMs = phaseSw.ElapsedMilliseconds;
+
+                ModContent.GetInstance<SteroidGuideMod>()?.Logger.Debug(
+                    $"[Perf-Analyze] strict={strictMs}ms, relaxed={relaxedMs}ms, topTier={topTierMs}ms");
             }
             finally
             {
                 original.Return();
-            }
-
-            // Filter to top-tier: craftable items not used as ingredient for another craftable item
-            foreach (var itemId in result.AllCraftable)
-            {
-                bool isIngredient = false;
-                if (graph.ItemUsedInResults.TryGetValue(itemId, out var resultItems))
-                {
-                    foreach (var resultItemId in resultItems)
-                    {
-                        if (result.AllCraftable.Contains(resultItemId))
-                        {
-                            isIngredient = true;
-                            break;
-                        }
-                    }
-                }
-                if (!isIngredient)
-                {
-                    result.TopTierItems.Add(itemId);
-                }
             }
 
             return result;
@@ -190,6 +225,7 @@ namespace SteroidGuide.Common
             visiting ??= new HashSet<int>();
             return TraverseRecipes(itemId, needed, graph, available, visiting,
                 noRecipeCache: null, consumeAvailable: false, ct, depth: 0,
+                out _,
                 ignoreOwnedForCurrentNode,
                 ignoreQuantity: mode == RecipeEvaluationMode.Reachable,
                 maxDisplayDepth: maxDisplayDepth);
@@ -200,6 +236,12 @@ namespace SteroidGuide.Common
         /// consumeAvailable=true: analysis mode (mutates available, uses noRecipeCache, breaks early on missing).
         /// consumeAvailable=false: display mode (read-only, builds full tree with fallback).
         /// </summary>
+        /// <remarks>
+        /// relaxedCacheRoot/Child: relaxed-pass-only memoization keyed by itemId.
+        /// Two separate dicts because root entries force usableOwned=0 (ignoreOwnedForCurrentNode=true)
+        /// while recursive entries honour owned-type presence — same itemId can produce different
+        /// outcomes. Strict pass MUST pass null (it mutates `available` mid-recursion, breaking purity).
+        /// </remarks>
         private static RecipeTreeNode TraverseRecipes(
             int itemId, int needed, RecipeGraphData graph,
             Dictionary<int, int> available, HashSet<int> visiting,
@@ -207,10 +249,14 @@ namespace SteroidGuide.Common
             bool consumeAvailable,
             CancellationToken ct,
             int depth,
+            out bool cycleTainted,
             bool ignoreOwnedForCurrentNode = false,
             bool ignoreQuantity = false,
-            int? maxDisplayDepth = null)
+            int? maxDisplayDepth = null,
+            Dictionary<int, bool> relaxedCacheRoot = null,
+            Dictionary<int, bool> relaxedCacheChild = null)
         {
+            cycleTainted = false;
             ct.ThrowIfCancellationRequested();
 
             available.TryGetValue(itemId, out int ownedCount);
@@ -221,6 +267,22 @@ namespace SteroidGuide.Common
                 OwnedCount = ownedCount,
                 IgnoreOwnedForCraftability = ignoreOwnedForCurrentNode
             };
+
+            // Relaxed memoization lookup. Caller (Analyze relaxed pass) only inspects
+            // node.Status != Missing — children are not consulted, so a hit can return a
+            // bare node with Status set and no children populated.
+            //
+            // Lookup happens BEFORE the `visiting` cycle check so a stored success at this
+            // itemId short-circuits recursion regardless of ancestor path. This is sound
+            // only because cycle-hit outcomes are NEVER stored (see end of function).
+            Dictionary<int, bool> relaxedCache = ignoreQuantity
+                ? (ignoreOwnedForCurrentNode ? relaxedCacheRoot : relaxedCacheChild)
+                : null;
+            if (relaxedCache != null && relaxedCache.TryGetValue(itemId, out bool cachedCraftable))
+            {
+                node.Status = cachedCraftable ? NodeStatus.Craftable : NodeStatus.Missing;
+                return node;
+            }
 
             // Three-way switch:
             //   - Root self-exclusion (analyze a craftable as its own goal): force 0.
@@ -241,18 +303,28 @@ namespace SteroidGuide.Common
                 // must not deduct: future siblings still rely on "type present" semantics.
                 if (consumeAvailable && !ignoreQuantity)
                     available[itemId] = ownedCount - needed;
+                // Cache: Owned counts as craftable for the relaxed pass's caller check.
+                // Safe because relaxed never mutates `available`, so the owned-presence test
+                // is stable across the whole pass.
+                relaxedCache?.TryAdd(itemId, true);
                 return node;
             }
 
             if (noRecipeCache != null && noRecipeCache.Contains(itemId))
             {
                 node.Status = NodeStatus.Missing;
+                relaxedCache?.TryAdd(itemId, false);
                 return node;
             }
 
             if (visiting.Contains(itemId))
             {
+                // DO NOT cache: cycle-hit depends on the live ancestor set. The same itemId
+                // visited from a disjoint path may resolve normally. Propagate cycleTainted=true
+                // so any ancestor whose Missing decision rests on this cycle hit will also
+                // skip caching (transitive cycle-fail correctness).
                 node.Status = NodeStatus.Missing;
+                cycleTainted = true;
                 return node;
             }
 
@@ -260,6 +332,7 @@ namespace SteroidGuide.Common
             {
                 noRecipeCache?.Add(itemId);
                 node.Status = NodeStatus.Missing;
+                relaxedCache?.TryAdd(itemId, false);
                 return node;
             }
 
@@ -281,6 +354,10 @@ namespace SteroidGuide.Common
             visiting.Add(itemId);
             int remaining = needed - usableOwned;
             bool foundViable = false;
+            // Tracks whether any descendant returned a cycle-tainted Missing. If true at end,
+            // we must NOT memoize this entry: its Missing might flip to Craftable when reached
+            // from a path where the cycle does not fire.
+            bool descendantCycleTaint = false;
 
             foreach (var recipe in recipes)
             {
@@ -308,8 +385,12 @@ namespace SteroidGuide.Common
                         int ingredientNeeded = ingredient.stack * batches;
                         var child = TraverseRecipes(ingredient.type, ingredientNeeded, graph,
                             available, visiting, noRecipeCache, consumeAvailable, ct,
-                            depth + 1, ignoreOwnedForCurrentNode: false, ignoreQuantity: ignoreQuantity,
-                            maxDisplayDepth: maxDisplayDepth);
+                            depth + 1, out bool childCycleTaint,
+                            ignoreOwnedForCurrentNode: false, ignoreQuantity: ignoreQuantity,
+                            maxDisplayDepth: maxDisplayDepth,
+                            relaxedCacheRoot: relaxedCacheRoot,
+                            relaxedCacheChild: relaxedCacheChild);
+                        if (childCycleTaint) descendantCycleTaint = true;
                         children.Add(child);
                         // Treat depth-limited leaves as still-viable in display mode: they
                         // represent "we ran out of display depth", not "missing". Without this,
@@ -369,10 +450,45 @@ namespace SteroidGuide.Common
                         int ingredientNeeded = ingredient.stack * batches;
                         node.Children.Add(TraverseRecipes(ingredient.type, ingredientNeeded, graph,
                             available, visiting, noRecipeCache, consumeAvailable, ct,
-                            depth + 1, ignoreOwnedForCurrentNode: false, ignoreQuantity: ignoreQuantity,
-                            maxDisplayDepth: maxDisplayDepth));
+                            depth + 1, out _,
+                            ignoreOwnedForCurrentNode: false, ignoreQuantity: ignoreQuantity,
+                            maxDisplayDepth: maxDisplayDepth,
+                            relaxedCacheRoot: relaxedCacheRoot,
+                            relaxedCacheChild: relaxedCacheChild));
                     }
                 }
+            }
+
+            // Memoize only when the result is NOT cycle-tainted. A success result with
+            // descendantCycleTaint=true is still safe to cache because foundViable means
+            // some recipe succeeded WITHOUT relying on a cycle-Missing child (that recipe's
+            // children were all non-Missing). A Missing result with descendantCycleTaint=true
+            // is unsafe: another path lacking the cycle could have flipped a cycle-tainted
+            // child to Craftable, which would have made this entry succeed.
+            //
+            // Propagate cycleTainted up only when our own Missing decision rests on the taint;
+            // a successful entry "absorbs" the taint (the picked recipe did not depend on it).
+            if (relaxedCache != null)
+            {
+                if (node.Status != NodeStatus.Missing)
+                {
+                    relaxedCache.TryAdd(itemId, true);
+                }
+                else if (!descendantCycleTaint)
+                {
+                    relaxedCache.TryAdd(itemId, false);
+                }
+                else
+                {
+                    cycleTainted = true;
+                }
+            }
+            else if (descendantCycleTaint && node.Status == NodeStatus.Missing)
+            {
+                // Even when we are not memoizing (display mode / strict pass), still propagate
+                // taint to keep the out-parameter contract consistent for any future caller
+                // that does memoize.
+                cycleTainted = true;
             }
 
             visiting.Remove(itemId);
