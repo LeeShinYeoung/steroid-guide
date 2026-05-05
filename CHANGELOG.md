@@ -5,6 +5,31 @@ When publishing a new version, copy the BBCode block for that release into the *
 
 ---
 
+## v1.1.6
+
+```
+[h2]v1.1.6 — Heavy-Mod Compatibility & Recipe Tree Stability[/h2]
+
+[h3]Bug Fixes[/h3]
+[list]
+[*]Fixed a freeze when running alongside recipe-heavy mods (e.g. imkSushi's Mod) — alt-recipe combinations and cyclic ingredient paths were blowing up the recipe tree before it could render
+[*]Selected-item recipe tree in [b]Reachable[/b] mode now shows the same recipe path the analyzer used to judge the item reachable, instead of an unrelated strict recipe
+[*]Inventory or chest changes during a long analysis are no longer dropped — the latest state is picked up immediately when the analysis finishes
+[/list]
+
+[h3]Recipe Tree[/h3]
+[list]
+[*]Initial tree caps at depth 10 with a [i]...[/i] leaf that loads the rest of the subtree on click — keeps the panel responsive on heavy mod setups
+[/list]
+
+[h3]Performance[/h3]
+[list]
+[*]Faster analysis on heavy recipe graphs by reusing intermediate craftability results across top-level items in the relaxed pass
+[/list]
+```
+
+---
+
 ## v1.1.5
 
 ```

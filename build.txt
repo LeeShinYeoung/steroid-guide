@@ -1,5 +1,5 @@
 displayName = Steroid Guide
 author = ShinYeoung Lee
-version = 1.1.5
+version = 1.1.6
 weakReferences = MagicStorage@0.7
 buildIgnore = assets/*, references/*, _workspace*, CHANGELOG.md, README.md, CLAUDE.md, Content/*/.omc/*
