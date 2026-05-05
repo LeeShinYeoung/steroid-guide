@@ -276,15 +276,59 @@ namespace SteroidGuide.Common.UI
         {
             _selectedItemId = itemId;
             UpdateGrid();
+            RefreshSelectedRecipeTree();
+        }
+
+        private void RefreshSelectedRecipeTree()
+        {
+            if (_selectedItemId <= 0)
+            {
+                _recipeTree?.ClearTree();
+                return;
+            }
 
             if (_latestScanResult.HasValue && _latestScanResult.Value.Items != null && RecipeGraphSystem.Graph != null)
             {
+                var availableSnapshot = new Dictionary<int, int>(_latestScanResult.Value.Items);
+                var graph = RecipeGraphSystem.Graph;
+                var mode = _craftabilityMode == CraftabilityMode.Reachable
+                    ? RecipeEvaluationMode.Reachable
+                    : RecipeEvaluationMode.Strict;
+
+                // Lazy loader re-reads _latestScanResult / RecipeGraphSystem.Graph / _craftabilityMode
+                // each invocation so deeper expansions reflect the freshest analysis state instead of
+                // capturing the snapshot taken at the time the user first clicked a top-tier item.
+                _recipeTree?.SetLazyLoader(node =>
+                {
+                    if (node == null)
+                        return null;
+                    if (!_latestScanResult.HasValue || _latestScanResult.Value.Items == null)
+                        return null;
+                    var liveGraph = RecipeGraphSystem.Graph;
+                    if (liveGraph == null)
+                        return null;
+                    var liveMode = _craftabilityMode == CraftabilityMode.Reachable
+                        ? RecipeEvaluationMode.Reachable
+                        : RecipeEvaluationMode.Strict;
+
+                    return CraftableAnalyzer.BuildRecipeTree(
+                        node.ItemId,
+                        Math.Max(1, node.RequiredCount),
+                        liveGraph,
+                        new Dictionary<int, int>(_latestScanResult.Value.Items),
+                        ignoreOwnedForCurrentNode: node.IgnoreOwnedForCraftability,
+                        maxDisplayDepth: CraftableAnalyzer.InitialDisplayTreeDepthLimit,
+                        mode: liveMode);
+                });
+
                 var tree = CraftableAnalyzer.BuildRecipeTree(
-                    itemId,
+                    _selectedItemId,
                     1,
-                    RecipeGraphSystem.Graph,
-                    _latestScanResult.Value.Items,
-                    ignoreOwnedForCurrentNode: true);
+                    graph,
+                    availableSnapshot,
+                    ignoreOwnedForCurrentNode: true,
+                    maxDisplayDepth: CraftableAnalyzer.InitialDisplayTreeDepthLimit,
+                    mode: mode);
                 _recipeTree?.SetTree(tree);
             }
         }

@@ -55,6 +55,7 @@ namespace SteroidGuide.Common.UI
 
         // Per-frame scan lookup for ingredient rows (avoids rebuilding the tree on scan change).
         private Func<int, int> _getHaveCount;
+        private Func<RecipeTreeNode, RecipeTreeNode> _loadDepthLimitedNode;
 
         private const float DepthIndent = 38f;
         private const float RowPadding = 6f;
@@ -204,9 +205,18 @@ namespace SteroidGuide.Common.UI
             _getHaveCount = getHaveCount;
         }
 
+        public void SetLazyLoader(Func<RecipeTreeNode, RecipeTreeNode> loadDepthLimitedNode)
+        {
+            _loadDepthLimitedNode = loadDepthLimitedNode;
+        }
+
         public void ClearTree()
         {
             _currentRoot = null;
+            // Drop the lazy loader so it cannot capture a stale graph/scan/mode after the
+            // selection clears. RefreshSelectedRecipeTree re-installs a fresh loader each
+            // time the user picks a new top-tier item.
+            _loadDepthLimitedNode = null;
             _list?.Clear();
             ShowPlaceholder();
         }
@@ -323,6 +333,8 @@ namespace SteroidGuide.Common.UI
             foreach (var child in expandableChildren)
             {
                 string countStr = child.RequiredCount > 1 ? $" x{child.RequiredCount}" : string.Empty;
+                if (child.IsDepthLimited)
+                    countStr += " ...";
 
                 // NodeStatus (Owned/Craftable/Missing) is no longer encoded in the name color —
                 // it surfaces via the right-side status chip (OWNED/MISSING) and the owned-count
@@ -347,7 +359,7 @@ namespace SteroidGuide.Common.UI
                 line.Height.Set(TreeItemBaseRowHeight, 0f);
 
                 var capturedChild = child;
-                line.OnLeftClick += (evt, el) => ToggleCollapse(capturedChild.ItemId);
+                line.OnLeftClick += (evt, el) => ToggleCollapse(capturedChild);
 
                 // Child row branches at childDepth (the parent's child-bus depth).
                 EmitRow(entries, openBusIndexStack, line, branchDepth: childDepth);
@@ -533,13 +545,48 @@ namespace SteroidGuide.Common.UI
 
         private static StatusChipInfo BuildStatusChip(RecipeTreeNode node, bool hasRecipeDetails) => default;
 
-        private void ToggleCollapse(int itemId)
+        private void ToggleCollapse(RecipeTreeNode node)
         {
-            if (!_collapsedItemIds.Remove(itemId))
-                _collapsedItemIds.Add(itemId);
+            if (node == null)
+                return;
+
+            // NOTE: Multiple sibling nodes may share the same ItemId (different branches of the
+            // tree depend on the same intermediate). Each is a distinct RecipeTreeNode instance,
+            // so expanding one does not expand its siblings — the user must click each branch
+            // individually. This is intentional: lazy expansion is keyed on instance identity,
+            // not item id.
+            if (node.IsDepthLimited && _loadDepthLimitedNode != null)
+            {
+                var loaded = _loadDepthLimitedNode(node);
+                if (loaded != null)
+                {
+                    ReplaceNodeContents(node, loaded);
+                    _collapsedItemIds.Remove(node.ItemId);
+                }
+            }
+            else if (!_collapsedItemIds.Remove(node.ItemId))
+            {
+                _collapsedItemIds.Add(node.ItemId);
+            }
 
             if (_currentRoot != null)
                 SetTree(_currentRoot);
+        }
+
+        private static void ReplaceNodeContents(RecipeTreeNode target, RecipeTreeNode source)
+        {
+            target.ItemId = source.ItemId;
+            target.RequiredCount = source.RequiredCount;
+            target.Status = source.Status;
+            target.OwnedCount = source.OwnedCount;
+            target.IgnoreOwnedForCraftability = source.IgnoreOwnedForCraftability;
+            target.UsedRecipe = source.UsedRecipe;
+            target.Children = source.Children ?? new List<RecipeTreeNode>();
+            // The lazy load just expanded this node; its children carry the new depth-cut frontier.
+            // Force the unlocked node to no longer be considered depth-limited so IsCollapsed
+            // takes the normal _collapsedItemIds path. Source children may themselves be
+            // IsDepthLimited (next frontier) — those remain unchanged.
+            target.IsDepthLimited = false;
         }
 
         private static bool HasRecipeDetails(RecipeTreeNode node)
@@ -549,13 +596,18 @@ namespace SteroidGuide.Common.UI
 
         private static bool HasDisplayableRecipeChildren(RecipeTreeNode node)
         {
-            return HasRecipeDetails(node) && node.Children.Count > 0;
+            return HasRecipeDetails(node) && (node.Children.Count > 0 || node.IsDepthLimited);
         }
 
         private bool IsCollapsed(RecipeTreeNode node)
         {
             if (node == null || node.UsedRecipe == null)
                 return false;
+            // IsDepthLimited only forces collapsed when the node has not yet been expanded
+            // (no children built). After ReplaceNodeContents inflates it, IsDepthLimited is
+            // cleared so user collapse/expand state via _collapsedItemIds takes over.
+            if (node.IsDepthLimited && (node.Children == null || node.Children.Count == 0))
+                return true;
             return _collapsedItemIds.Contains(node.ItemId);
         }
 

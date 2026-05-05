@@ -105,8 +105,12 @@ namespace SteroidGuide.Common.UI
         private int _totalPages = 1;
         private int _selectedItemId = -1;
         private int _updateCounter;
+        // Main thread only. Background task observes via CancellationToken only.
         private Task<AnalysisResult> _pendingAnalysisTask;
         private CancellationTokenSource _analysisCts;
+        // Coalesced scan captured while an analysis is in flight; consumed when the task commits.
+        // Null when no newer scan has been observed since dispatch. Main thread only.
+        private ScanResult? _pendingScanResult;
         private int ItemsPerPage => _itemGrid?.ItemsPerPage ?? 18;
 
         // Layout — new 3-column redesign
@@ -453,6 +457,7 @@ namespace SteroidGuide.Common.UI
             _analysisCts?.Dispose();
             _analysisCts = null;
             _pendingAnalysisTask = null;
+            _pendingScanResult = null;
         }
 
         public void OnShow()
@@ -482,11 +487,22 @@ namespace SteroidGuide.Common.UI
             _updateCounter++;
             if (_updateCounter % 30 == 0 && Main.LocalPlayer != null)
             {
+                // Always scan and detect changes, even while an analysis is in flight.
+                // Coalesce the freshest changed scan into _pendingScanResult so a 7+ second
+                // analysis cannot mask inventory/chest mutations that happened during it.
                 var scanResult = ItemScanner.ScanAvailableItems(Main.LocalPlayer);
                 if (HasScanChanged(scanResult))
                 {
-                    _latestScanResult = scanResult;
-                    RunAnalysisFromLatestScan();
+                    if (_pendingAnalysisTask == null)
+                    {
+                        _latestScanResult = scanResult;
+                        RunAnalysisFromLatestScan();
+                    }
+                    else
+                    {
+                        // Overwrite any earlier pending scan — only the newest matters.
+                        _pendingScanResult = scanResult;
+                    }
                 }
             }
 
@@ -510,6 +526,17 @@ namespace SteroidGuide.Common.UI
                 else
                 {
                     _ = task.Exception; // observe to prevent UnobservedTaskException
+                }
+
+                // If a newer scan arrived during the analysis, redispatch immediately on
+                // the next frame's flow by promoting it now (Update has already run the
+                // scan branch this frame, so we dispatch right here).
+                if (_pendingScanResult.HasValue)
+                {
+                    var pending = _pendingScanResult.Value;
+                    _pendingScanResult = null;
+                    _latestScanResult = pending;
+                    RunAnalysisFromLatestScan();
                 }
             }
 
