@@ -14,6 +14,12 @@ namespace SteroidGuide.Common
         Missing
     }
 
+    public enum RecipeEvaluationMode
+    {
+        Strict,
+        Reachable
+    }
+
     public class RecipeTreeNode
     {
         public int ItemId;
@@ -23,6 +29,7 @@ namespace SteroidGuide.Common
         public bool IgnoreOwnedForCraftability;
         public Recipe UsedRecipe;
         public List<RecipeTreeNode> Children = new();
+        public bool IsDepthLimited;
     }
 
     public class AnalysisResult
@@ -38,6 +45,8 @@ namespace SteroidGuide.Common
 
     public static class CraftableAnalyzer
     {
+        public const int InitialDisplayTreeDepthLimit = 10;
+
         private struct DictSnapshot
         {
             public (int Key, int Value)[] Entries;
@@ -89,11 +98,10 @@ namespace SteroidGuide.Common
                     original.Restore(working);
 
                     var node = TraverseRecipes(itemId, 1, graph, working, visiting,
-                        noRecipeCache, consumeAvailable: true, ct, ignoreOwnedForCurrentNode: true);
+                        noRecipeCache, consumeAvailable: true, ct, depth: 0,
+                        ignoreOwnedForCurrentNode: true);
                     if (node.Status != NodeStatus.Missing)
-                    {
                         result.AllCraftable.Add(itemId);
-                    }
                 }
 
                 // Relaxed pass: every owned ingredient *type* is treated as infinite supply.
@@ -108,12 +116,10 @@ namespace SteroidGuide.Common
                     original.Restore(working);
 
                     var node = TraverseRecipes(itemId, 1, graph, working, visiting,
-                        noRecipeCache, consumeAvailable: true, ct,
+                        noRecipeCache, consumeAvailable: true, ct, depth: 0,
                         ignoreOwnedForCurrentNode: true, ignoreQuantity: true);
                     if (node.Status != NodeStatus.Missing)
-                    {
                         relaxed.Add(itemId);
-                    }
                 }
 
                 // ReachableCraftable = relaxed \ AllCraftable (already disjoint due to short-circuit).
@@ -177,11 +183,16 @@ namespace SteroidGuide.Common
 
         public static RecipeTreeNode BuildRecipeTree(int itemId, int needed,
             RecipeGraphData graph, Dictionary<int, int> available, HashSet<int> visiting = null,
-            bool ignoreOwnedForCurrentNode = false, CancellationToken ct = default)
+            bool ignoreOwnedForCurrentNode = false, CancellationToken ct = default,
+            int? maxDisplayDepth = null,
+            RecipeEvaluationMode mode = RecipeEvaluationMode.Strict)
         {
             visiting ??= new HashSet<int>();
             return TraverseRecipes(itemId, needed, graph, available, visiting,
-                noRecipeCache: null, consumeAvailable: false, ct, ignoreOwnedForCurrentNode);
+                noRecipeCache: null, consumeAvailable: false, ct, depth: 0,
+                ignoreOwnedForCurrentNode,
+                ignoreQuantity: mode == RecipeEvaluationMode.Reachable,
+                maxDisplayDepth: maxDisplayDepth);
         }
 
         /// <summary>
@@ -195,8 +206,10 @@ namespace SteroidGuide.Common
             HashSet<int> noRecipeCache,
             bool consumeAvailable,
             CancellationToken ct,
+            int depth,
             bool ignoreOwnedForCurrentNode = false,
-            bool ignoreQuantity = false)
+            bool ignoreQuantity = false,
+            int? maxDisplayDepth = null)
         {
             ct.ThrowIfCancellationRequested();
 
@@ -250,6 +263,21 @@ namespace SteroidGuide.Common
                 return node;
             }
 
+            if (!consumeAvailable && maxDisplayDepth.HasValue && depth >= maxDisplayDepth.Value)
+            {
+                // Display-only depth cut: do NOT force Status=Missing. A Missing leaf at the
+                // depth boundary would propagate up through the parent's success search (which
+                // treats any Missing child as a failure) and falsely demote a craftable parent
+                // to Missing — corrupting Reachable/Strict consistency past depth 10.
+                // Mark via IsDepthLimited only; the parent's success-search must explicitly
+                // ignore depth-limited children. Analysis pass (consumeAvailable=true) is
+                // guarded above so it never reaches this branch.
+                node.Status = NodeStatus.Craftable;
+                node.UsedRecipe = recipes.Count > 0 ? recipes[0] : null;
+                node.IsDepthLimited = node.UsedRecipe != null;
+                return node;
+            }
+
             visiting.Add(itemId);
             int remaining = needed - usableOwned;
             bool foundViable = false;
@@ -280,9 +308,15 @@ namespace SteroidGuide.Common
                         int ingredientNeeded = ingredient.stack * batches;
                         var child = TraverseRecipes(ingredient.type, ingredientNeeded, graph,
                             available, visiting, noRecipeCache, consumeAvailable, ct,
-                            ignoreOwnedForCurrentNode: false, ignoreQuantity: ignoreQuantity);
+                            depth + 1, ignoreOwnedForCurrentNode: false, ignoreQuantity: ignoreQuantity,
+                            maxDisplayDepth: maxDisplayDepth);
                         children.Add(child);
-                        if (child.Status == NodeStatus.Missing)
+                        // Treat depth-limited leaves as still-viable in display mode: they
+                        // represent "we ran out of display depth", not "missing". Without this,
+                        // a depth-cut grandchild would falsely demote its parent to Missing
+                        // and force the fallback recipe path. Analysis pass is guarded against
+                        // depth cuts so IsDepthLimited never appears with consumeAvailable=true.
+                        if (child.Status == NodeStatus.Missing && !child.IsDepthLimited)
                         {
                             canMake = false;
                             if (consumeAvailable) break;
@@ -335,7 +369,8 @@ namespace SteroidGuide.Common
                         int ingredientNeeded = ingredient.stack * batches;
                         node.Children.Add(TraverseRecipes(ingredient.type, ingredientNeeded, graph,
                             available, visiting, noRecipeCache, consumeAvailable, ct,
-                            ignoreOwnedForCurrentNode: false, ignoreQuantity: ignoreQuantity));
+                            depth + 1, ignoreOwnedForCurrentNode: false, ignoreQuantity: ignoreQuantity,
+                            maxDisplayDepth: maxDisplayDepth));
                     }
                 }
             }
@@ -343,5 +378,6 @@ namespace SteroidGuide.Common
             visiting.Remove(itemId);
             return node;
         }
+
     }
 }

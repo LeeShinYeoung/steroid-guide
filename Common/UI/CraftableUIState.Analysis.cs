@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using SteroidGuide.Common;
@@ -91,10 +92,8 @@ namespace SteroidGuide.Common.UI
             // snapshots `available` internally and mutates only its own working copy — the input dict
             // is left untouched, so main-thread reads of _latestScanResult.Value.Items (e.g. HasScanChanged
             // and BuildRecipeTree for recipe tree display) are safe while the task runs.
-            var items = scanResult.Items;
-
             _pendingAnalysisTask = Task.Run(
-                () => AnalyzeAndCollectVisible(graph, items, token),
+                () => AnalyzeAndCollectVisible(graph, scanResult.Items, token),
                 token);
         }
 
@@ -103,12 +102,16 @@ namespace SteroidGuide.Common.UI
         private static AnalysisResult AnalyzeAndCollectVisible(
             RecipeGraphData graph, Dictionary<int, int> available, CancellationToken ct)
         {
+            var stopwatch = Stopwatch.StartNew();
             var result = CraftableAnalyzer.Analyze(graph, available, ct);
+            long analyzeMs = stopwatch.ElapsedMilliseconds;
+            stopwatch.Restart();
 
             // Defensive: the main thread also reads `available` via OnItemSelected's BuildRecipeTree.
             // Display mode does not mutate the dict today, but a local copy decouples us from that assumption.
             var availableCopy = new Dictionary<int, int>(available);
             var visiting = new HashSet<int>();
+
             foreach (int topTierId in result.TopTierItems)
             {
                 ct.ThrowIfCancellationRequested();
@@ -116,30 +119,53 @@ namespace SteroidGuide.Common.UI
                 visiting.Clear();
                 var tree = CraftableAnalyzer.BuildRecipeTree(
                     topTierId, 1, graph, availableCopy, visiting,
-                    ignoreOwnedForCurrentNode: true, ct);
+                    ignoreOwnedForCurrentNode: true, ct,
+                    maxDisplayDepth: CraftableAnalyzer.InitialDisplayTreeDepthLimit);
 
                 var ids = new HashSet<int>();
                 CollectTreeItemIds(tree, ids, ct);
                 result.VisibleIngredients[topTierId] = ids;
             }
 
-            // Same display walk for partial top-tier items so search-by-ingredient and
-            // _itemPropsCache cover Reachable mode too. The display tree is built strict
-            // (consumeAvailable=false, ignoreQuantity=false), exposing missing-quantity
-            // ingredients as Missing nodes — exactly what we want indexed for search.
+            // Reachable top-tier: build BOTH strict and reachable display trees and index the
+            // union of their ingredients. The on-screen tree only renders the reachable mode,
+            // but the strict tree surfaces missing-quantity ingredients that the user may still
+            // search by name. Indexing the union preserves search recall without affecting what
+            // is actually drawn.
             foreach (int topTierId in result.ReachableTopTierItems)
             {
                 ct.ThrowIfCancellationRequested();
 
                 visiting.Clear();
-                var tree = CraftableAnalyzer.BuildRecipeTree(
+                var reachableTree = CraftableAnalyzer.BuildRecipeTree(
                     topTierId, 1, graph, availableCopy, visiting,
-                    ignoreOwnedForCurrentNode: true, ct);
+                    ignoreOwnedForCurrentNode: true, ct,
+                    maxDisplayDepth: CraftableAnalyzer.InitialDisplayTreeDepthLimit,
+                    mode: RecipeEvaluationMode.Reachable);
+
+                visiting.Clear();
+                var strictTree = CraftableAnalyzer.BuildRecipeTree(
+                    topTierId, 1, graph, availableCopy, visiting,
+                    ignoreOwnedForCurrentNode: true, ct,
+                    maxDisplayDepth: CraftableAnalyzer.InitialDisplayTreeDepthLimit,
+                    mode: RecipeEvaluationMode.Strict);
 
                 var ids = new HashSet<int>();
-                CollectTreeItemIds(tree, ids, ct);
+                CollectTreeItemIds(reachableTree, ids, ct);
+                CollectTreeItemIds(strictTree, ids, ct);
                 result.VisibleIngredients[topTierId] = ids;
             }
+
+            long visibleTreesMs = stopwatch.ElapsedMilliseconds;
+            // Demoted to Debug to avoid log spam in MP — this fires every analysis dispatch,
+            // which can chain on inventory mutations.
+            ModContent.GetInstance<SteroidGuideMod>()?.Logger.Debug(
+                "[Perf] Craftable analysis: " +
+                $"Analyze={analyzeMs}ms, " +
+                $"VisibleTrees={visibleTreesMs}ms, " +
+                $"TopTier={result.TopTierItems.Count}, " +
+                $"ReachableTopTier={result.ReachableTopTierItems.Count}, " +
+                $"DepthLimit={CraftableAnalyzer.InitialDisplayTreeDepthLimit}");
 
             return result;
         }
@@ -209,10 +235,15 @@ namespace SteroidGuide.Common.UI
 
         private bool HasScanChanged(ScanResult scanResult)
         {
-            return _analysisResult == null ||
-                !_latestScanResult.HasValue ||
-                _latestScanResult.Value.ChestCount != scanResult.ChestCount ||
-                !DictEquals(_latestScanResult.Value.Items, scanResult.Items);
+            // Force redispatch when there is no committed analysis yet. Without the
+            // `_analysisResult == null` guard, OnShow (which clears _analysisResult but
+            // happens after the first scan was already cached) can leave the UI stuck
+            // with no result if the inventory has not changed since.
+            if (_analysisResult == null || !_latestScanResult.HasValue) return true;
+            var prev = _latestScanResult.Value;
+            return prev.ChestCount != scanResult.ChestCount
+                || prev.SyncedChestCount != scanResult.SyncedChestCount
+                || !DictEquals(prev.Items, scanResult.Items);
         }
 
         private static bool DictEquals(Dictionary<int, int> a, Dictionary<int, int> b)
