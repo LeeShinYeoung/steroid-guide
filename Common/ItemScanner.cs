@@ -219,7 +219,7 @@ namespace SteroidGuide.Common
                 }
             }
 
-            // --- Magic Storage merge (weak reference; no-op when MS is not loaded) ---
+            // --- Magic Storage merge (looked up at runtime; no-op when MS is not loaded) ---
             // Hearts within ScanRangeSq contribute their flattened unit contents.
             // Each Heart counts as one entry in both ChestCount and SyncedChestCount —
             // MS handles its own MP sync, so any Heart we can read is "synced" from our side.

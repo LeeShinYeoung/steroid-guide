@@ -1,133 +1,135 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.IO;
-using System.Runtime.CompilerServices;
+using System.Reflection;
 using Terraria;
 using Terraria.DataStructures;
-using Terraria.ID;
 using Terraria.ModLoader;
 
 namespace SteroidGuide.Common
 {
-    // Single point of contact with the Magic Storage assembly.
+    // Reads the items stored in nearby Magic Storage networks.
     //
-    // All direct uses of MagicStorage.* types live inside MergeNearbyHeartItems_Impl,
-    // which is marked NoInlining so the JIT only resolves those types when the impl
-    // method actually executes. Combined with the ModLoader.HasMod gate in IsAvailable,
-    // a missing or incompatible Magic Storage install never breaks our load.
+    // SteroidGuide.dll must not contain any compile-time reference to Magic Storage. The runtime
+    // resolves type and assembly references lazily (JIT, GC, AssemblyLoadContext unload), and when
+    // Magic Storage is not loaded that resolution kills the game on mod reload; no attribute or
+    // try/catch can intercept it. So the project does not reference Magic Storage at all: the
+    // members below are looked up by name once all mods are loaded and dropped again on unload.
     //
-    // The impl method's body is wrapped in a single try/catch (TypeLoadException,
-    // MissingMethodException, etc.) that logs once and returns 0, so a future
-    // MS API rename degrades us to chests-only rather than crashing the scan.
-    internal static class MagicStorageBridge
+    // Magic Storage offers no Mod.Call for reading stored items, so these are its internal members.
+    // If any of them is missing or throws, the integration turns itself off until the next reload
+    // (logged once) and the scan simply covers chests only.
+    public sealed class MagicStorageBridge : ModSystem
     {
-        private static bool? _isAvailable;
-        private static bool _loggedFailure;
+        private const string HeartTypeName = "MagicStorage.Components.TEStorageHeart";
+        private const string UnitTypeName = "MagicStorage.Components.TEAbstractStorageUnit";
 
-        public static bool IsAvailable
+        private sealed class StorageApi
         {
-            get
+            public Type HeartType;
+            public PropertyInfo IsAlive;       // bool TEStorageHeart.IsAlive
+            public MethodInfo GetStorageUnits; // IEnumerable<TEAbstractStorageUnit> TEStorageHeart.GetStorageUnits()
+            public MethodInfo GetItems;        // IEnumerable<Item> TEAbstractStorageUnit.GetItems(), virtual dispatch via Invoke
+        }
+
+        private static StorageApi _api;
+
+        public override void PostSetupContent() => _api = Resolve();
+
+        public override void Unload() => _api = null;
+
+        private StorageApi Resolve()
+        {
+            if (!ModLoader.TryGetMod("MagicStorage", out Mod magicStorage))
+                return null;
+
+            const BindingFlags Public = BindingFlags.Public | BindingFlags.Instance;
+            Type heart = magicStorage.Code?.GetType(HeartTypeName, throwOnError: false);
+            Type unit = magicStorage.Code?.GetType(UnitTypeName, throwOnError: false);
+            var api = new StorageApi
             {
-                if (_isAvailable.HasValue) return _isAvailable.Value;
-                _isAvailable = ModLoader.HasMod("MagicStorage");
-                return _isAvailable.Value;
+                HeartType = heart,
+                IsAlive = heart?.GetProperty("IsAlive", Public, null, typeof(bool), Type.EmptyTypes, null),
+                GetStorageUnits = heart?.GetMethod("GetStorageUnits", Public, Type.EmptyTypes),
+                GetItems = unit?.GetMethod("GetItems", Public, Type.EmptyTypes),
+            };
+
+            if (api.IsAlive == null || api.GetStorageUnits == null || api.GetItems == null
+                || !typeof(IEnumerable).IsAssignableFrom(api.GetStorageUnits.ReturnType)
+                || !typeof(IEnumerable).IsAssignableFrom(api.GetItems.ReturnType))
+            {
+                Mod.Logger.Warn($"Magic Storage {magicStorage.Version} is loaded but its storage members have changed; " +
+                    "nearby Magic Storage will not be scanned.");
+                return null;
             }
+
+            Mod.Logger.Info($"Magic Storage {magicStorage.Version} found; nearby storage networks will be scanned.");
+            return api;
         }
 
-        // Called from CraftableUISystem.OnWorldUnload so we re-probe per session
-        // (covers the user disabling/enabling MS between worlds without quitting).
-        public static void ResetGate()
+        // Adds the items of every live Storage Heart within range, including the units it reaches
+        // remotely, to `target` and returns how many Hearts were found. Nothing is added if the
+        // scan fails part-way. Coordinates are in pixels; rangeSq matches the chest scan radius.
+        public static int MergeNearbyHeartItems(float playerX, float playerY, float rangeSq, Dictionary<int, int> target)
         {
-            _isAvailable = null;
-            _loggedFailure = false;
-        }
+            var api = _api;
+            if (api == null)
+                return 0;
 
-        // Returns the number of Hearts found in range. Their stored items are merged
-        // into target. Short-circuits to 0 if Magic Storage is not loaded or if the
-        // bridge call throws.
-        //
-        // playerX / playerY are pixel-space (matches the chest scan distance check).
-        // scanRangeSq is the same value ItemScanner uses for chests (60 tiles squared).
-        public static int MergeNearbyHeartItems(float playerX, float playerY,
-            float scanRangeSq, Dictionary<int, int> target)
-        {
-            if (!IsAvailable) return 0;
-            return MergeNearbyHeartItems_Impl(playerX, playerY, scanRangeSq, target);
-        }
-
-        // CRITICAL: this is the ONLY method that touches MagicStorage.* types.
-        // NoInlining keeps those type references out of MergeNearbyHeartItems' frame,
-        // so the JIT does not try to resolve them when MS is missing.
-        [JITWhenModsEnabled("MagicStorage")]
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        private static int MergeNearbyHeartItems_Impl(float playerX, float playerY,
-            float scanRangeSq, Dictionary<int, int> target)
-        {
             try
             {
-                // 1) collect every live Heart in range
-                List<MagicStorage.Components.TEStorageHeart> hearts = null;
-                foreach (var kv in TileEntity.ByPosition)
+                int hearts = 0;
+                Dictionary<int, int> found = null;
+                // Two Hearts can reach the same units, so each unit is counted once.
+                HashSet<Point16> seenUnits = null;
+
+                foreach (var entity in TileEntity.ByPosition.Values)
                 {
-                    if (kv.Value is not MagicStorage.Components.TEStorageHeart heart)
-                        continue;
-                    if (!heart.IsAlive)
+                    if (!api.HeartType.IsInstanceOfType(entity) || !(bool)api.IsAlive.GetValue(entity))
                         continue;
 
-                    float hx = heart.Position.X * 16f + 16f;
-                    float hy = heart.Position.Y * 16f + 16f;
-                    float dx = hx - playerX;
-                    float dy = hy - playerY;
-                    if (dx * dx + dy * dy > scanRangeSq)
+                    // Hearts are 2x2 tiles: measure from their centre.
+                    float dx = entity.Position.X * 16f + 16f - playerX;
+                    float dy = entity.Position.Y * 16f + 16f - playerY;
+                    if (dx * dx + dy * dy > rangeSq)
                         continue;
 
-                    hearts ??= new List<MagicStorage.Components.TEStorageHeart>();
-                    hearts.Add(heart);
-                }
+                    hearts++;
+                    found ??= new Dictionary<int, int>();
+                    seenUnits ??= new HashSet<Point16>();
 
-                if (hearts == null)
-                    return 0;
-
-                // 2) dedup units across all reachable Hearts (GetStorageUnits includes
-                //    RemoteAccess targets, so two Hearts pointing at the same warehouse
-                //    must not double-count).
-                var seenUnits = new HashSet<Point16>();
-                foreach (var heart in hearts)
-                {
-                    foreach (var unit in heart.GetStorageUnits())
+                    foreach (object unit in (IEnumerable)api.GetStorageUnits.Invoke(entity, null))
                     {
-                        if (unit == null) continue;
-                        if (!seenUnits.Add(unit.Position)) continue;
+                        if (unit is not TileEntity unitEntity || !seenUnits.Add(unitEntity.Position))
+                            continue;
 
-                        foreach (var item in unit.GetItems())
+                        foreach (object stored in (IEnumerable)api.GetItems.Invoke(unit, null))
                         {
-                            if (item == null || item.IsAir) continue;
-                            if (item.type <= ItemID.None || item.stack <= 0) continue;
-
-                            target.TryGetValue(item.type, out int count);
-                            target[item.type] = count + item.stack;
+                            if (stored is Item { IsAir: false } item)
+                            {
+                                found.TryGetValue(item.type, out int count);
+                                found[item.type] = count + item.stack;
+                            }
                         }
                     }
                 }
 
-                return hearts.Count;
-            }
-            catch (Exception ex) when (
-                ex is TypeLoadException ||
-                ex is MissingMethodException ||
-                ex is MissingMemberException ||
-                ex is MemberAccessException ||
-                ex is FileNotFoundException ||
-                ex is BadImageFormatException ||
-                ex is InvalidCastException)
-            {
-                if (!_loggedFailure)
+                if (found != null)
                 {
-                    _loggedFailure = true;
-                    var mod = ModLoader.TryGetMod("SteroidGuide", out var sg) ? sg : null;
-                    mod?.Logger?.Warn(
-                        "MagicStorageBridge degraded: " + ex.GetType().Name + ": " + ex.Message);
+                    foreach (var (type, stack) in found)
+                    {
+                        target.TryGetValue(type, out int count);
+                        target[type] = count + stack;
+                    }
                 }
+                return hearts;
+            }
+            catch (Exception e)
+            {
+                // Best effort only: Magic Storage must never take the scan, or the game, down with it.
+                _api = null;
+                ModContent.GetInstance<SteroidGuideMod>()?.Logger.Warn(
+                    "Reading Magic Storage failed; nearby storage will not be scanned until mods are reloaded.", e);
                 return 0;
             }
         }
