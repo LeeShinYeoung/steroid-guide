@@ -1,5 +1,4 @@
 using System;
-using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
@@ -45,173 +44,188 @@ namespace SteroidGuide.Common
         public List<int> ReachableTopTierItems = new();
     }
 
+    // Counters for the [Perf-Analyze] log line. Purely observational: nothing in the analysis
+    // reads them back.
+    public sealed class AnalyzeStats
+    {
+        public long StrictMs, RelaxedMs, TopTierMs;
+        public int Roots;
+        public long StrictNodes;
+        public long StrictAttempts;
+        public long StrictFailedAttempts;
+        public int UndoMax;
+
+        public override string ToString() =>
+            $"strict={StrictMs}ms, relaxed={RelaxedMs}ms, topTier={TopTierMs}ms, roots={Roots}, " +
+            $"strictNodes={StrictNodes}, attempts={StrictAttempts}, failedAttempts={StrictFailedAttempts}, " +
+            $"undoMax={UndoMax}";
+    }
+
     public static class CraftableAnalyzer
     {
         public const int InitialDisplayTreeDepthLimit = 10;
 
-        private struct DictSnapshot
+        // Write-ahead record of every change the strict pass makes to its working inventory.
+        // Rolling back to a mark restores the dictionary exactly (value and key presence), in
+        // reverse order, so a failed recipe attempt costs only as much as the writes it made
+        // instead of copying the whole inventory before every attempt.
+        private sealed class UndoLog
         {
-            public (int Key, int Value)[] Entries;
-            public int Count;
+            private readonly List<(int Key, bool Existed, int Old)> _entries = new();
 
-            public DictSnapshot(Dictionary<int, int> dict)
+            public int Count => _entries.Count;
+            public int Max { get; private set; }
+
+            public void Set(Dictionary<int, int> dict, int key, int value)
             {
-                Entries = ArrayPool<(int, int)>.Shared.Rent(dict.Count);
-                Count = 0;
-                foreach (var kv in dict)
-                    Entries[Count++] = (kv.Key, kv.Value);
+                bool existed = dict.TryGetValue(key, out int old);
+                _entries.Add((key, existed, old));
+                if (_entries.Count > Max) Max = _entries.Count;
+                dict[key] = value;
             }
 
-            public void Restore(Dictionary<int, int> dict)
+            public void Rollback(Dictionary<int, int> dict, int mark)
             {
-                dict.Clear();
-                for (int i = 0; i < Count; i++)
-                    dict[Entries[i].Key] = Entries[i].Value;
-            }
-
-            public void Return()
-            {
-                if (Entries != null)
+                for (int i = _entries.Count - 1; i >= mark; i--)
                 {
-                    ArrayPool<(int, int)>.Shared.Return(Entries);
-                    Entries = null;
+                    var e = _entries[i];
+                    if (e.Existed)
+                        dict[e.Key] = e.Old;
+                    else
+                        dict.Remove(e.Key);
                 }
+                _entries.RemoveRange(mark, _entries.Count - mark);
             }
         }
 
-        public static AnalysisResult Analyze(RecipeGraphData graph, Dictionary<int, int> available, CancellationToken ct = default)
+        public static AnalysisResult Analyze(RecipeGraphData graph, Dictionary<int, int> available,
+            CancellationToken ct = default, AnalyzeStats stats = null)
         {
+            stats ??= new AnalyzeStats();
             var result = new AnalysisResult();
             // "no recipe" is a graph property independent of quantity, so the cache is shared
             // across the strict and relaxed passes.
             var noRecipeCache = new HashSet<int>();
-
-            // Phase timers for [Perf-Analyze] breakdown. Local Stopwatch — never persisted.
-            long strictMs = 0, relaxedMs = 0, topTierMs = 0;
             var phaseSw = new Stopwatch();
+            stats.Roots = graph.RecipesByResult.Count;
 
-            var original = new DictSnapshot(available);
-            try
+            // Private copy: `available` is also read by the main thread while this task runs.
+            var working = new Dictionary<int, int>(available);
+            var undo = new UndoLog();
+            // Every Add in TraverseRecipes is paired with a Remove before it returns, so the set
+            // is empty again after each root and can be reused.
+            var visiting = new HashSet<int>();
+
+            // Strict pass: builds AllCraftable using exact owned counts. Each root starts from
+            // the original inventory: the undo log is rolled back to empty after every root.
+            phaseSw.Restart();
+            foreach (var itemId in graph.RecipesByResult.Keys)
             {
-                var working = new Dictionary<int, int>(available);
+                ct.ThrowIfCancellationRequested();
 
-                // Strict pass: builds AllCraftable using exact owned counts.
-                phaseSw.Restart();
-                foreach (var itemId in graph.RecipesByResult.Keys)
+                var node = TraverseRecipes(itemId, 1, graph, working, visiting,
+                    noRecipeCache, consumeAvailable: true, ct, depth: 0,
+                    out _,
+                    ignoreOwnedForCurrentNode: true,
+                    undo: undo, stats: stats);
+                undo.Rollback(working, 0);
+                if (node.Status != NodeStatus.Missing)
+                    result.AllCraftable.Add(itemId);
+            }
+            stats.StrictMs = phaseSw.ElapsedMilliseconds;
+            stats.UndoMax = undo.Max;
+
+            // Relaxed pass: every owned ingredient *type* is treated as infinite supply.
+            // Skip items already known strictly-craftable (they cannot be in ReachableCraftable).
+            // `working` equals the original inventory here (strict pass rolled everything back)
+            // and the relaxed pass never writes to it.
+            //
+            // Relaxed memoization (Tier 1): the relaxed pass never mutates `working` (writes are
+            // gated on `!ignoreQuantity`). With no in-call mutation the function becomes a pure
+            // mapping (itemId, ignoreOwnedForCurrentNode) → craftable-or-not *for this Analyze
+            // invocation*. We therefore memoize relaxed results in two dictionaries — one for root
+            // entries (ignoreOwnedForCurrentNode=true, owned self-supply forced to 0) and one for
+            // recursive child entries (false).
+            //
+            // Caches are scoped to this method — they are GC'd when Analyze returns. Strict pass
+            // passes null (caching strict results would be unsound: strict pass DOES mutate
+            // `working` mid-recursion). Cycle-hit (visiting) results are NEVER stored because they
+            // depend on the live ancestor set, not the item alone.
+            var relaxedCacheRoot = new Dictionary<int, bool>();
+            var relaxedCacheChild = new Dictionary<int, bool>();
+
+            phaseSw.Restart();
+            var relaxed = new HashSet<int>();
+            foreach (var itemId in graph.RecipesByResult.Keys)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (result.AllCraftable.Contains(itemId)) continue;
+
+                var node = TraverseRecipes(itemId, 1, graph, working, visiting,
+                    noRecipeCache, consumeAvailable: true, ct, depth: 0,
+                    out _,
+                    ignoreOwnedForCurrentNode: true, ignoreQuantity: true,
+                    relaxedCacheRoot: relaxedCacheRoot,
+                    relaxedCacheChild: relaxedCacheChild);
+                if (node.Status != NodeStatus.Missing)
+                    relaxed.Add(itemId);
+            }
+            stats.RelaxedMs = phaseSw.ElapsedMilliseconds;
+
+            // ReachableCraftable = relaxed \ AllCraftable (already disjoint due to short-circuit).
+            foreach (var id in relaxed)
+            {
+                result.ReachableCraftable.Add(id);
+            }
+
+            // Top-tier filtering universe for partial items: AllCraftable ∪ ReachableCraftable.
+            // Rationale: a partial item that is an ingredient of a *strict* craftable should still
+            // be hidden, because the user will see the strict parent in All Craftable.
+            phaseSw.Restart();
+            foreach (var itemId in result.ReachableCraftable)
+            {
+                bool isIngredient = false;
+                if (graph.ItemUsedInResults.TryGetValue(itemId, out var resultItems))
                 {
-                    ct.ThrowIfCancellationRequested();
-
-                    var visiting = new HashSet<int>();
-                    original.Restore(working);
-
-                    var node = TraverseRecipes(itemId, 1, graph, working, visiting,
-                        noRecipeCache, consumeAvailable: true, ct, depth: 0,
-                        out _,
-                        ignoreOwnedForCurrentNode: true);
-                    if (node.Status != NodeStatus.Missing)
-                        result.AllCraftable.Add(itemId);
-                }
-                strictMs = phaseSw.ElapsedMilliseconds;
-
-                // Relaxed pass: every owned ingredient *type* is treated as infinite supply.
-                // Skip items already known strictly-craftable (they cannot be in ReachableCraftable).
-                //
-                // Relaxed memoization (Tier 1): the relaxed pass never mutates `working` (line 242
-                // gate on `!ignoreQuantity` and line 295 likewise). With `working` restored to
-                // `original` before each top-level call AND no in-call mutation, the function
-                // becomes a pure mapping (itemId, ignoreOwnedForCurrentNode) → craftable-or-not
-                // *for this Analyze invocation*. We therefore memoize relaxed results in two
-                // dictionaries — one for root entries (ignoreOwnedForCurrentNode=true, owned
-                // self-supply forced to 0) and one for recursive child entries (false).
-                //
-                // Caches are scoped to this method — they are GC'd when Analyze returns. Strict
-                // pass passes null (caching strict results would be unsound: strict pass DOES
-                // mutate `working` mid-recursion). Cycle-hit (visiting) results are NEVER stored
-                // because they depend on the live ancestor set, not the item alone.
-                var relaxedCacheRoot = new Dictionary<int, bool>();
-                var relaxedCacheChild = new Dictionary<int, bool>();
-
-                phaseSw.Restart();
-                var relaxed = new HashSet<int>();
-                foreach (var itemId in graph.RecipesByResult.Keys)
-                {
-                    ct.ThrowIfCancellationRequested();
-                    if (result.AllCraftable.Contains(itemId)) continue;
-
-                    var visiting = new HashSet<int>();
-                    original.Restore(working);
-
-                    var node = TraverseRecipes(itemId, 1, graph, working, visiting,
-                        noRecipeCache, consumeAvailable: true, ct, depth: 0,
-                        out _,
-                        ignoreOwnedForCurrentNode: true, ignoreQuantity: true,
-                        relaxedCacheRoot: relaxedCacheRoot,
-                        relaxedCacheChild: relaxedCacheChild);
-                    if (node.Status != NodeStatus.Missing)
-                        relaxed.Add(itemId);
-                }
-                relaxedMs = phaseSw.ElapsedMilliseconds;
-
-                // ReachableCraftable = relaxed \ AllCraftable (already disjoint due to short-circuit).
-                foreach (var id in relaxed)
-                {
-                    result.ReachableCraftable.Add(id);
-                }
-
-                // Top-tier filtering universe for partial items: AllCraftable ∪ ReachableCraftable.
-                // Rationale: a partial item that is an ingredient of a *strict* craftable should still
-                // be hidden, because the user will see the strict parent in All Craftable.
-                phaseSw.Restart();
-                foreach (var itemId in result.ReachableCraftable)
-                {
-                    bool isIngredient = false;
-                    if (graph.ItemUsedInResults.TryGetValue(itemId, out var resultItems))
+                    foreach (var resultItemId in resultItems)
                     {
-                        foreach (var resultItemId in resultItems)
+                        if (result.AllCraftable.Contains(resultItemId)
+                            || result.ReachableCraftable.Contains(resultItemId))
                         {
-                            if (result.AllCraftable.Contains(resultItemId)
-                                || result.ReachableCraftable.Contains(resultItemId))
-                            {
-                                isIngredient = true;
-                                break;
-                            }
+                            isIngredient = true;
+                            break;
                         }
                     }
-                    if (!isIngredient)
-                    {
-                        result.ReachableTopTierItems.Add(itemId);
-                    }
                 }
-
-                // Filter to top-tier: craftable items not used as ingredient for another craftable item.
-                foreach (var itemId in result.AllCraftable)
+                if (!isIngredient)
                 {
-                    bool isIngredient = false;
-                    if (graph.ItemUsedInResults.TryGetValue(itemId, out var resultItems))
+                    result.ReachableTopTierItems.Add(itemId);
+                }
+            }
+
+            // Filter to top-tier: craftable items not used as ingredient for another craftable item.
+            foreach (var itemId in result.AllCraftable)
+            {
+                bool isIngredient = false;
+                if (graph.ItemUsedInResults.TryGetValue(itemId, out var resultItems))
+                {
+                    foreach (var resultItemId in resultItems)
                     {
-                        foreach (var resultItemId in resultItems)
+                        if (result.AllCraftable.Contains(resultItemId))
                         {
-                            if (result.AllCraftable.Contains(resultItemId))
-                            {
-                                isIngredient = true;
-                                break;
-                            }
+                            isIngredient = true;
+                            break;
                         }
                     }
-                    if (!isIngredient)
-                    {
-                        result.TopTierItems.Add(itemId);
-                    }
                 }
-                topTierMs = phaseSw.ElapsedMilliseconds;
+                if (!isIngredient)
+                {
+                    result.TopTierItems.Add(itemId);
+                }
+            }
+            stats.TopTierMs = phaseSw.ElapsedMilliseconds;
 
-                ModContent.GetInstance<SteroidGuideMod>()?.Logger.Debug(
-                    $"[Perf-Analyze] strict={strictMs}ms, relaxed={relaxedMs}ms, topTier={topTierMs}ms");
-            }
-            finally
-            {
-                original.Return();
-            }
+            ModContent.GetInstance<SteroidGuideMod>()?.Logger.Debug($"[Perf-Analyze] {stats}");
 
             return result;
         }
@@ -241,6 +255,10 @@ namespace SteroidGuide.Common
         /// Two separate dicts because root entries force usableOwned=0 (ignoreOwnedForCurrentNode=true)
         /// while recursive entries honour owned-type presence — same itemId can produce different
         /// outcomes. Strict pass MUST pass null (it mutates `available` mid-recursion, breaking purity).
+        ///
+        /// undo: required in strict analysis (consumeAvailable && !ignoreQuantity), the only mode that
+        /// writes to `available`. Every write goes through it so a failed recipe attempt can be rolled
+        /// back to the mark taken before the attempt.
         /// </remarks>
         private static RecipeTreeNode TraverseRecipes(
             int itemId, int needed, RecipeGraphData graph,
@@ -254,10 +272,16 @@ namespace SteroidGuide.Common
             bool ignoreQuantity = false,
             int? maxDisplayDepth = null,
             Dictionary<int, bool> relaxedCacheRoot = null,
-            Dictionary<int, bool> relaxedCacheChild = null)
+            Dictionary<int, bool> relaxedCacheChild = null,
+            UndoLog undo = null,
+            AnalyzeStats stats = null)
         {
             cycleTainted = false;
             ct.ThrowIfCancellationRequested();
+
+            // Strict analysis is the only mode that consumes the inventory.
+            bool strictAnalysis = consumeAvailable && !ignoreQuantity;
+            if (strictAnalysis && stats != null) stats.StrictNodes++;
 
             available.TryGetValue(itemId, out int ownedCount);
             var node = new RecipeTreeNode
@@ -301,8 +325,8 @@ namespace SteroidGuide.Common
                 node.Status = NodeStatus.Owned;
                 // In relaxed mode the dict represents type-presence with infinite supply, so we
                 // must not deduct: future siblings still rely on "type present" semantics.
-                if (consumeAvailable && !ignoreQuantity)
-                    available[itemId] = ownedCount - needed;
+                if (strictAnalysis)
+                    undo.Set(available, itemId, ownedCount - needed);
                 // Cache: Owned counts as craftable for the relaxed pass's caller check.
                 // Safe because relaxed never mutates `available`, so the owned-presence test
                 // is stable across the whole pass.
@@ -361,72 +385,64 @@ namespace SteroidGuide.Common
 
             foreach (var recipe in recipes)
             {
-                // Save state for rollback in analysis mode. Skip under ignoreQuantity:
-                // dict mutations are skipped in relaxed mode, so there is nothing to roll back.
-                DictSnapshot? saved = consumeAvailable && !ignoreQuantity ? new DictSnapshot(available) : null;
-                bool snapshotReturned = false;
-                try
+                // Mark before this attempt's first write so a failure rolls back exactly what
+                // the attempt (and its successful sub-crafts) consumed.
+                int mark = strictAnalysis ? undo.Count : 0;
+                if (strictAnalysis && stats != null) stats.StrictAttempts++;
+
+                // Skip the consume-zero write in relaxed mode — the dict's "type present"
+                // semantics must remain stable across siblings.
+                if (strictAnalysis && usableOwned > 0)
+                    undo.Set(available, itemId, 0);
+
+                int batchSize = Math.Max(1, recipe.createItem.stack);
+                int batches = (remaining + batchSize - 1) / batchSize;
+
+                // Analysis callers only read Status, so the child list is built for display only.
+                var children = consumeAvailable ? null : new List<RecipeTreeNode>();
+                bool canMake = true;
+
+                foreach (var ingredient in recipe.requiredItem)
                 {
-                    // Skip the consume-zero write in relaxed mode — the dict's "type present"
-                    // semantics must remain stable across siblings.
-                    if (consumeAvailable && !ignoreQuantity && usableOwned > 0)
-                        available[itemId] = 0;
-
-                    int batchSize = Math.Max(1, recipe.createItem.stack);
-                    int batches = (remaining + batchSize - 1) / batchSize;
-
-                    var children = new List<RecipeTreeNode>();
-                    bool canMake = true;
-
-                    foreach (var ingredient in recipe.requiredItem)
+                    if (ingredient.type <= ItemID.None)
+                        continue;
+                    int ingredientNeeded = ingredient.stack * batches;
+                    var child = TraverseRecipes(ingredient.type, ingredientNeeded, graph,
+                        available, visiting, noRecipeCache, consumeAvailable, ct,
+                        depth + 1, out bool childCycleTaint,
+                        ignoreOwnedForCurrentNode: false, ignoreQuantity: ignoreQuantity,
+                        maxDisplayDepth: maxDisplayDepth,
+                        relaxedCacheRoot: relaxedCacheRoot,
+                        relaxedCacheChild: relaxedCacheChild,
+                        undo: undo, stats: stats);
+                    if (childCycleTaint) descendantCycleTaint = true;
+                    children?.Add(child);
+                    // Treat depth-limited leaves as still-viable in display mode: they
+                    // represent "we ran out of display depth", not "missing". Without this,
+                    // a depth-cut grandchild would falsely demote its parent to Missing
+                    // and force the fallback recipe path. Analysis pass is guarded against
+                    // depth cuts so IsDepthLimited never appears with consumeAvailable=true.
+                    if (child.Status == NodeStatus.Missing && !child.IsDepthLimited)
                     {
-                        if (ingredient.type <= ItemID.None)
-                            continue;
-                        int ingredientNeeded = ingredient.stack * batches;
-                        var child = TraverseRecipes(ingredient.type, ingredientNeeded, graph,
-                            available, visiting, noRecipeCache, consumeAvailable, ct,
-                            depth + 1, out bool childCycleTaint,
-                            ignoreOwnedForCurrentNode: false, ignoreQuantity: ignoreQuantity,
-                            maxDisplayDepth: maxDisplayDepth,
-                            relaxedCacheRoot: relaxedCacheRoot,
-                            relaxedCacheChild: relaxedCacheChild);
-                        if (childCycleTaint) descendantCycleTaint = true;
-                        children.Add(child);
-                        // Treat depth-limited leaves as still-viable in display mode: they
-                        // represent "we ran out of display depth", not "missing". Without this,
-                        // a depth-cut grandchild would falsely demote its parent to Missing
-                        // and force the fallback recipe path. Analysis pass is guarded against
-                        // depth cuts so IsDepthLimited never appears with consumeAvailable=true.
-                        if (child.Status == NodeStatus.Missing && !child.IsDepthLimited)
-                        {
-                            canMake = false;
-                            if (consumeAvailable) break;
-                        }
-                    }
-
-                    if (canMake)
-                    {
-                        saved?.Return();
-                        snapshotReturned = true;
-                        node.Status = NodeStatus.Craftable;
-                        node.UsedRecipe = recipe;
-                        node.Children = children;
-                        foundViable = true;
-                        break;
-                    }
-                    else if (consumeAvailable && saved.HasValue)
-                    {
-                        saved.Value.Restore(available);
-                        saved.Value.Return();
-                        snapshotReturned = true;
+                        canMake = false;
+                        if (consumeAvailable) break;
                     }
                 }
-                finally
+
+                if (canMake)
                 {
-                    if (!snapshotReturned && saved.HasValue)
-                    {
-                        saved.Value.Return();
-                    }
+                    node.Status = NodeStatus.Craftable;
+                    node.UsedRecipe = recipe;
+                    if (children != null)
+                        node.Children = children;
+                    foundViable = true;
+                    break;
+                }
+
+                if (strictAnalysis)
+                {
+                    undo.Rollback(available, mark);
+                    if (stats != null) stats.StrictFailedAttempts++;
                 }
             }
 

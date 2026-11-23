@@ -5,6 +5,15 @@ When publishing a new version, copy the BBCode block for that release into the *
 
 ---
 
+## v1.1.7
+
+```
+[h2]v1.1.7[/h2]
+Craftable list loads much faster on large modpacks.
+```
+
+---
+
 ## v1.1.6
 
 ```

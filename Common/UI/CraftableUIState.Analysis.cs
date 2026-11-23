@@ -68,19 +68,26 @@ namespace SteroidGuide.Common.UI
         private void RunAnalysis()
         {
             if (Main.LocalPlayer == null) return;
-            DispatchAnalysis(ItemScanner.ScanAvailableItems(Main.LocalPlayer));
+            var scanResult = ItemScanner.ScanAvailableItems(Main.LocalPlayer);
+            // Store the scan before dispatching: the periodic rescan in Update compares against
+            // _latestScanResult, and leaving it empty made every UI open run the same analysis
+            // twice (the in-flight rescan looked like a change and was redispatched on completion).
+            _latestScanResult = scanResult;
+            DispatchAnalysis(scanResult, "show");
         }
 
-        private void RunAnalysisFromLatestScan()
+        private void RunAnalysisFromLatestScan(string reason)
         {
             if (!_latestScanResult.HasValue) return;
-            DispatchAnalysis(_latestScanResult.Value);
+            DispatchAnalysis(_latestScanResult.Value, reason);
         }
 
-        private void DispatchAnalysis(ScanResult scanResult)
+        private void DispatchAnalysis(ScanResult scanResult, string reason)
         {
             var graph = RecipeGraphSystem.Graph;
             if (graph == null || scanResult.Items == null) return;
+
+            ModContent.GetInstance<SteroidGuideMod>()?.Logger.Debug($"[Analysis] dispatch: {reason}");
 
             var oldCts = _analysisCts;
             _analysisCts = new CancellationTokenSource();
@@ -88,10 +95,11 @@ namespace SteroidGuide.Common.UI
             oldCts?.Dispose();
             var token = _analysisCts.Token;
 
-            // ItemScanner.ScanAvailableItems returns a fresh dict per call. CraftableAnalyzer.Analyze
-            // snapshots `available` internally and mutates only its own working copy — the input dict
-            // is left untouched, so main-thread reads of _latestScanResult.Value.Items (e.g. HasScanChanged
-            // and BuildRecipeTree for recipe tree display) are safe while the task runs.
+            // ItemScanner.ScanAvailableItems returns a fresh dict per call, and the same dict is kept in
+            // _latestScanResult. CraftableAnalyzer.Analyze copies `available` and mutates only its own
+            // working copy — the input dict is left untouched, so main-thread reads of
+            // _latestScanResult.Value.Items (HasScanChanged, recipe tree counts and BuildRecipeTree for
+            // recipe tree display) are safe while the task runs.
             _pendingAnalysisTask = Task.Run(
                 () => AnalyzeAndCollectVisible(graph, scanResult.Items, token),
                 token);
@@ -235,11 +243,12 @@ namespace SteroidGuide.Common.UI
 
         private bool HasScanChanged(ScanResult scanResult)
         {
-            // Force redispatch when there is no committed analysis yet. Without the
-            // `_analysisResult == null` guard, OnShow (which clears _analysisResult but
-            // happens after the first scan was already cached) can leave the UI stuck
-            // with no result if the inventory has not changed since.
-            if (_analysisResult == null || !_latestScanResult.HasValue) return true;
+            if (!_latestScanResult.HasValue) return true;
+            // No committed result and nothing in flight (the dispatch bailed out or the task
+            // faulted): force a retry so the UI cannot get stuck without a result. While an
+            // analysis IS in flight, compare against the scan it is working on instead —
+            // treating "no result yet" as a change re-ran the identical analysis.
+            if (_analysisResult == null && _pendingAnalysisTask == null) return true;
             var prev = _latestScanResult.Value;
             return prev.ChestCount != scanResult.ChestCount
                 || prev.SyncedChestCount != scanResult.SyncedChestCount

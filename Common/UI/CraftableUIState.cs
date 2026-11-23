@@ -488,7 +488,7 @@ namespace SteroidGuide.Common.UI
             if (_updateCounter % 30 == 0 && Main.LocalPlayer != null)
             {
                 // Always scan and detect changes, even while an analysis is in flight.
-                // Coalesce the freshest changed scan into _pendingScanResult so a 7+ second
+                // Coalesce the freshest changed scan into _pendingScanResult so a long-running
                 // analysis cannot mask inventory/chest mutations that happened during it.
                 var scanResult = ItemScanner.ScanAvailableItems(Main.LocalPlayer);
                 if (HasScanChanged(scanResult))
@@ -496,13 +496,19 @@ namespace SteroidGuide.Common.UI
                     if (_pendingAnalysisTask == null)
                     {
                         _latestScanResult = scanResult;
-                        RunAnalysisFromLatestScan();
+                        RunAnalysisFromLatestScan(_analysisResult == null ? "retry" : "scan-changed");
                     }
                     else
                     {
                         // Overwrite any earlier pending scan — only the newest matters.
                         _pendingScanResult = scanResult;
                     }
+                }
+                else
+                {
+                    // Back to the scan being analysed (e.g. an item moved out and back during the
+                    // analysis): a rescan queued in between is stale and must not be redispatched.
+                    _pendingScanResult = null;
                 }
             }
 
@@ -536,7 +542,7 @@ namespace SteroidGuide.Common.UI
                     var pending = _pendingScanResult.Value;
                     _pendingScanResult = null;
                     _latestScanResult = pending;
-                    RunAnalysisFromLatestScan();
+                    RunAnalysisFromLatestScan("pending-rescan");
                 }
             }
 
