@@ -13,4 +13,11 @@
     <TModLoaderTargetsPath Condition="Exists('$(TModLoaderPath)/tMLMod.targets')">$(TModLoaderPath)/tMLMod.targets</TModLoaderTargetsPath>
   </PropertyGroup>
   <Import Project="$(TModLoaderTargetsPath)" Condition="'$(TModLoaderTargetsPath)' != ''" />
+  <ItemGroup>
+    <Reference Include="MagicStorage">
+      <HintPath>references\MagicStorage.dll</HintPath>
+      <Private>false</Private>
+      <SpecificVersion>false</SpecificVersion>
+    </Reference>
+  </ItemGroup>
 </Project>

@@ -45,6 +45,7 @@ namespace SteroidGuide.Common.UI
         {
             ItemScanner.ClearSyncState();
             CraftableState?.CancelPendingAnalysis();
+            MagicStorageBridge.ResetGate();
         }
 
         public void ShowUI(int npcIndex = -1)
